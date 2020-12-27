@@ -23,7 +23,8 @@ pthread_t enfermeros[];
 FILE* logFile;
 
 void writeLogMessage(char *id, char *msg);
-void nuevoPaciente(struct Paciente pacientes[],int &num_pacientes,int signal)
+void nuevoPaciente(struct Paciente pacientes[],int &num_pacientes,int signal);
+void accionesPaciente(struct Paciente pacientes[]);
 
 int main(int argc, char** argv) {
 
@@ -83,4 +84,65 @@ writeLogMessage(estadistico_self,"Comienzo de actividad del estadistico.");
 //escribe en el log que finaliza la actividad (EXCLUSION MUTUA)
 writeLogMessage(estadistico_self,"Fin de actividad del estadistico.");
 //cambia paciente en estudio y vuelve a 1 (EXCLUSION MUTUA)
+}
+
+void accionesPaciente(struct Paciente pacientes[]){
+    //Guardar en el log la hora de entrada.
+    writeLogMessage(paciente_self,"Hora de entrada del paciente.");
+    //Guardar en el log el tipo de solicitud.
+    writeLogMessage(paciente_self,"Tipo de solicitud del paciente.");
+    //Duerme 3 segundos
+    sleep(3);
+    //Comprueba si está siendo atendido.
+    //Si no lo está, calculamos el comportamiento del paciente (si se va por cansarse 
+    //de esperar, si se lo piensa mejor) o si se va al baño y pierde su turno.
+    if(pacientes[i].atendido==false){
+        int comportamientoPaciente=rand()% 100+1;
+        //un 20 % de los pacientes se cansa de esperar y se va.
+        if(comportamientoPaciente<=20){
+            //Log que avisa de que se va por cansancio
+            writeLogMessage(paciente_self,"El paciente se ha ido porque se ha cansado de esperar.");
+            //codigo de cuando se va
+        }else if(comportamientoPaciente>20&&comportamientoPaciente<=30){
+            //Log que avisa de que se va porque se lo ha pensado mejor
+            writeLogMessage(paciente_self,"El paciente se lo ha pensado mejor y se ha ido.");
+            //codigo de cuando se lo piensa mejor y se va tambien.
+        }else{
+            //70% restante
+            int comportamientoPacRestantes=rand()% 100+1;
+            if(comportamientoPacRestantes<=5){
+                //Log que avisa de que ha perdido el turno por ir al baño
+                writeLogMessage(paciente_self,"El paciente ha ido al baño y ha perdido el turno.");
+                //Codigo de cuando se va al baño y pierde el turno.
+            }else{
+                //Codigo de los pacientes que ni se van ni pierden turno.
+                //El paciente debe dormir 3 segundos y vuelve a 4.
+                sleep(4);
+            }
+        }
+    }else{
+        //Si está siendo atendido por el enfermer@ debemos esperar a que termine.
+    }
+    //Si no se va por gripe o catarro calcula si le da reacción
+    int reaccionPaciente=rand()% 100+1;
+    if(reaccionPaciente<=10){
+        //Si le da cambia el valor de atendido a 4
+        //Esperamos a que termine la atención
+    }else{
+        //Si no le da reacción calculamos si decide o no participar en el estudio serológico
+        int participaEstudio=rand()% 100+1;
+        if(participaEstudio<=25){
+            //Si decide participar
+            //Cambia el valor de la variable serológica
+                    //Cambia el valor de paciente en estudio.
+                    //Avisa al estadistico
+                    //Guardamos el log en que está preparado para el estudio
+                    //Se queda esperando a que digan que pueden marchar
+                    //Guardamos el log en que deja el estudio
+        }
+    }
+    //Libera su posición en cola de solicitudes y se va
+    //Escribe en el log
+    writeLogMessage(paciente_self,"El paciente ha terminado de vacunarse y se ha ido.");
+    //Fin del hilo Paciente.
 }
