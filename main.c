@@ -47,44 +47,44 @@ void writeLogMessage(char *id, char *msg) {
 //metodo que comprueba si hay sitio para la llegada de un nuevo paciente, y en ese caso lo crea
 void nuevoPaciente(struct Paciente pacientes[],int &num_pacientes,int signal)
 {
-    for(int i = 0;i<15;i++){
-        if(pacientes[i] == null){
-            //si hay espacio, creamos un nuevo paciente y lo añadimos al array de pacientes
-            pacientes new_paciente;
-            pacientes[i] = new_paciente;
-            //incrementamos el numero de pacientes
-            num_pacientes++;
-            new_paciente.id = num_pacientes;
-            new_paciente.atendido = false;
-            //13 = SIGPIPE; 16 = SIGUSR1; 17 = SIGUSR2
-            switch(signal){
-                case 13:
-                    //paciente senior
-                    new_paciente.tipo = 3;
-                   break;
-                case 16:
-                    //paciente junior
-                    new_paciente.tipo = 1;
-                    break;
-                case 17:
-                    //paciente medio
-                    new_paciente.tipo = 2;
-                    break;
-            }
-            new_paciente.serologia = false;
-        }
-    }
+for(int i = 0;i<15;i++){
+if(pacientes[i] == null){
+//si hay espacio, creamos un nuevo paciente y lo añadimos al array de pacientes
+pacientes new_paciente;
+pacientes[i] = new_paciente;
+//incrementamos el numero de pacientes
+num_pacientes++;
+new_paciente.id = num_pacientes;
+new_paciente.atendido = false;
+//13 = SIGPIPE; 16 = SIGUSR1; 17 = SIGUSR2
+switch(signal){
+case 13:
+//paciente senior
+new_paciente.tipo = 3;
+break;
+case 16:
+//paciente junior
+new_paciente.tipo = 1;
+break;
+case 17:
+//paciente medio
+new_paciente.tipo = 2;
+break;
+}
+new_paciente.serologia = false;
+}
+}
 }
 //AÑADIR SINCRONIZACION
 void accionesEstadistico(pthread_t estadistico)
 {
 //espera que le avisen de que hay un paciente en estudio (EXCLUSION MUTUA)
 //escribe en el log el comienzo de actividad (EXCLUSION MUTUA)
-writeLogMessage(estadistico_self,"Comienzo de actividad del estadistico.");
+    writeLogMessage(estadistico_self,"Comienzo de actividad del estadistico.");
 //calcula el tiempo de actividad
 //termina la actividad y avisa al paciente (VARIABLES CONDICION)
 //escribe en el log que finaliza la actividad (EXCLUSION MUTUA)
-writeLogMessage(estadistico_self,"Fin de actividad del estadistico.");
+    writeLogMessage(estadistico_self,"Fin de actividad del estadistico.");
 //cambia paciente en estudio y vuelve a 1 (EXCLUSION MUTUA)
 }
 
@@ -135,7 +135,7 @@ void accionesPaciente(struct Paciente pacientes[]){
     //Duerme 3 segundos
     sleep(3);
     //Comprueba si está siendo atendido.
-    //Si no lo está, calculamos el comportamiento del paciente (si se va por cansarse 
+    //Si no lo está, calculamos el comportamiento del paciente (si se va por cansarse
     //de esperar, si se lo piensa mejor) o si se va al baño y pierde su turno.
     for(int i=0;i<15;i++){
         if(pacientes[i].atendido==false){
@@ -176,16 +176,80 @@ void accionesPaciente(struct Paciente pacientes[]){
             if(participaEstudio<=25){
                 //Si decide participar
                 //Cambia el valor de la variable serológica
-                    //Cambia el valor de paciente en estudio.
-                    //Avisa al estadistico
-                    //Guardamos el log en que está preparado para el estudio
-                    //Se queda esperando a que digan que pueden marchar
-                    //Guardamos el log en que deja el estudio
+                //Cambia el valor de paciente en estudio.
+                //Avisa al estadistico
+                //Guardamos el log en que está preparado para el estudio
+                //Se queda esperando a que digan que pueden marchar
+                //Guardamos el log en que deja el estudio
             }
         }
         //Libera su posición en cola de solicitudes y se va
         //Escribe en el log
         writeLogMessage(paciente_self,"El paciente ha terminado de vacunarse y se ha ido.");
         //Fin del hilo Paciente.
+    }
+}
+
+void accionesMedico(pthread_t medico){
+    struct Paciente masEsperando;
+    int tipoAtencion = 0; //si es reaccion o vacunacion
+    //buscamos al paciente CON REACCIÓN que más tiempo lleve esperando
+    for(int i = 0; i < numPacientes; i++){
+        //si hay con reaccion
+        if(pacientes[i]){
+            break;
+        }
+            //si no, escogemos al que mas lleve esperando
+        else{
+            //sino hay pacientes esperando
+            if(pacientes  == null){
+                //esperamos 1 segundo
+                sleep(1);
+                //volvemos al primero
+                i = 0;
+            }
+            break;
+        }
+    }
+
+    //si hay paciente
+    if(masEsperando != null){
+        masEsperando.atendido = true;
+        tipoAtencion = rand()% 100+1;
+
+        //Guardar en el log la hora de entrada.
+        writeLogMessage(paciente_self,"Hora de entrada del paciente.");
+
+        //paciente está en regla
+        if(tipoAtencion <= 80){
+            //el tiempo de espera está entre 1 y 4 segundos
+            //comprueba si hay reaccion
+            //comprueba si participa en el estudio
+
+            //motivo finalización atención
+            writeLogMessage(paciente_self,"El paciente fue atendido con éxito.");
+        }
+            //paciente está mal identificado
+        else if(tipoAtencion > 80 && tipoAtencion <= 90){
+            //el tiempo de espera está entre 2 y 6 segundos
+            //comprueba si hay reaccion
+            //comprueba si participa en el estudio
+
+            //motivo finalización atención
+            writeLogMessage(paciente_self,"El paciente estaba mal identificado.");
+        }
+            //paciente tiene catarro o gripe
+        else{
+            //el tiempo de espera está entre 6 y 10 segundos
+            //no se vacunan
+            //no participan en el estudio
+            //abandonan consultorio
+
+            //motivo finalización atención
+            writeLogMessage(paciente_self,"El paciente tenía catarro o gripe.");
+        }
+
+        //finaliza la atención
+        writeLogMessage(paciente_self,"El paciente fue atendido.");
     }
 }
