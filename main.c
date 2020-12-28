@@ -16,7 +16,7 @@ struct Paciente {
 
 static int MAXPACIENTES = 15, ENFERMEROS = 3;
 struct Paciente pacientes[15];
-int numPacientes;
+int numPacientes, contEnfermero;
 pthread_t medico, estadistico;
 pthread_t enfermeros[];
 
@@ -25,6 +25,8 @@ FILE* logFile;
 void writeLogMessage(char *id, char *msg);
 void nuevoPaciente(struct Paciente pacientes[],int &num_pacientes,int signal);
 void accionesPaciente(struct Paciente pacientes[]);
+void accionesEnfermero(char tipo);
+void accionesEstadistico(pthread_t estadistico);
 
 int main(int argc, char** argv) {
 
@@ -84,6 +86,45 @@ writeLogMessage(estadistico_self,"Comienzo de actividad del estadistico.");
 //escribe en el log que finaliza la actividad (EXCLUSION MUTUA)
 writeLogMessage(estadistico_self,"Fin de actividad del estadistico.");
 //cambia paciente en estudio y vuelve a 1 (EXCLUSION MUTUA)
+}
+
+void accionesEnfermero(char tipo) {
+    srand(time(NULL));
+    struct Paciente pacVacio;
+    if(tipo=='J' || tipo=='M' || tipo=='S') {   // Tipo valido
+        for(int i = 0; i<MAXPACIENTES; i++) {
+            if(pacientes[i].tipo == tipo && !pacientes[i].atendido) {
+                pacientes[i].atendido = true;
+                int random = (rand()%100)+1;    //Random entre 0 y 100
+                writeLogMessage("Enfermero", "Comienza la atención del paciente");
+                if(random<=80) {    //To_do en regla
+                    sleep((rand()%4)+1);
+                    if(pacientes[i].serologia){
+                        //TODO Se le manda a estudio
+                    }
+                    writeLogMessage("Enfermero", "Fin atención paciente exitosa");
+                } else if(random>80 && random<= 90) {  //Mal identificados
+                    sleep((rand()%5)+2);
+                    if(pacientes[i].serologia){
+                        // TODO Se le manda a estudio
+                    }
+                    writeLogMessage("Enfermero", "Fin atención paciente exitosa");
+                } else if(random>90 && random<=100){   //Catarro o Gripe
+                    sleep((rand()%5)+6);
+                    writeLogMessage("Enfermero", "Fin atención paciente: Catarro o Gripe");
+                    pacientes[i] = pacVacio;
+                    //Abandonan consultorio sin reaccion ni estudio
+                }
+            }
+            if(contEnfermero == 5) {
+                writeLogMessage("Enfermero", "Descanso para el cafe");
+                sleep(5);
+            }
+        }
+    } else {    //Tipo invalido
+        perror("Emfermero sin tipo valido");
+        return;
+    }
 }
 
 void accionesPaciente(struct Paciente pacientes[]){
