@@ -14,8 +14,8 @@ struct Paciente {
     bool serologia;
 };
 
-static int MAXPACIENTES = 15, ENFERMEROS = 3;
-struct Paciente pacientes[15];
+const int MAXPACIENTES = 15, ENFERMEROS = 3;
+struct Paciente pacientes[MAXPACIENTES];
 int numPacientes, contEnfermero;
 pthread_t medico, estadistico;
 pthread_t enfermeros[];
@@ -23,7 +23,7 @@ pthread_t enfermeros[];
 FILE* logFile;
 
 void writeLogMessage(char *id, char *msg);
-void nuevoPaciente(struct Paciente pacientes[],int &num_pacientes,int signal);
+void nuevoPaciente(int signal);
 void accionesPaciente(struct Paciente pacientes[]);
 void accionesEnfermero(char tipo);
 void accionesEstadistico(pthread_t estadistico);
@@ -45,46 +45,46 @@ void writeLogMessage(char *id, char *msg) {
 }
 //CAMBIAR NOMBRE NEW PACIENTE Y CREAR EL HILO
 //metodo que comprueba si hay sitio para la llegada de un nuevo paciente, y en ese caso lo crea
-void nuevoPaciente(struct Paciente pacientes[],int &num_pacientes,int signal)
+void nuevoPaciente(int signal)
 {
-for(int i = 0;i<15;i++){
-if(pacientes[i] == null){
-//si hay espacio, creamos un nuevo paciente y lo añadimos al array de pacientes
-pacientes new_paciente;
-pacientes[i] = new_paciente;
-//incrementamos el numero de pacientes
-num_pacientes++;
-new_paciente.id = num_pacientes;
-new_paciente.atendido = false;
-//13 = SIGPIPE; 16 = SIGUSR1; 17 = SIGUSR2
-switch(signal){
-case 13:
-//paciente senior
-new_paciente.tipo = 3;
-break;
-case 16:
-//paciente junior
-new_paciente.tipo = 1;
-break;
-case 17:
-//paciente medio
-new_paciente.tipo = 2;
-break;
-}
-new_paciente.serologia = false;
-}
-}
-}
+    for(int i = 0;i<MAXPACIENTES;i++){
+        if(pacientes[i].id == 0){
+            //si hay espacio, creamos un nuevo paciente y lo añadimos al array de pacientes
+            struct Paciente new_paciente;
+            pacientes[i] = new_paciente;
+            //incrementamos el numero de pacientes
+            numPacientes++;
+            new_paciente.id = numPacientes;
+            new_paciente.atendido = false;
+            //13 = SIGPIPE; 16 = SIGUSR1; 17 = SIGUSR2
+            switch(signal){
+            case 13:
+            //paciente senior
+            new_paciente.tipo = 3;
+            break;
+            case 16:
+            //paciente junior
+            new_paciente.tipo = 1;
+            break;
+            case 17:
+            //paciente medio
+            new_paciente.tipo = 2;
+            break;
+            }
+            new_paciente.serologia = false;
+        }
+    }
+    }
 //AÑADIR SINCRONIZACION
 void accionesEstadistico(pthread_t estadistico)
 {
 //espera que le avisen de que hay un paciente en estudio (EXCLUSION MUTUA)
 //escribe en el log el comienzo de actividad (EXCLUSION MUTUA)
-    writeLogMessage(estadistico_self,"Comienzo de actividad del estadistico.");
+    writeLogMessage("Estadistico","Comienzo de actividad del estadistico.");
 //calcula el tiempo de actividad
 //termina la actividad y avisa al paciente (VARIABLES CONDICION)
 //escribe en el log que finaliza la actividad (EXCLUSION MUTUA)
-    writeLogMessage(estadistico_self,"Fin de actividad del estadistico.");
+    writeLogMessage("Estadistico","Fin de actividad del estadistico.");
 //cambia paciente en estudio y vuelve a 1 (EXCLUSION MUTUA)
 }
 
@@ -129,32 +129,32 @@ void accionesEnfermero(char tipo) {
 
 void accionesPaciente(struct Paciente pacientes[]){
     //Guardar en el log la hora de entrada.
-    writeLogMessage(paciente_self,"Hora de entrada del paciente.");
+    writeLogMessage("Paciente","Hora de entrada del paciente.");
     //Guardar en el log el tipo de solicitud.
-    writeLogMessage(paciente_self,"Tipo de solicitud del paciente.");
+    writeLogMessage("Paciente","Tipo de solicitud del paciente.");
     //Duerme 3 segundos
     sleep(3);
     //Comprueba si está siendo atendido.
     //Si no lo está, calculamos el comportamiento del paciente (si se va por cansarse
     //de esperar, si se lo piensa mejor) o si se va al baño y pierde su turno.
-    for(int i=0;i<15;i++){
+    for(int i=0;i<MAXPACIENTES;i++){
         if(pacientes[i].atendido==false){
             int comportamientoPaciente=rand()% 100+1;
             //un 20 % de los pacientes se cansa de esperar y se va.
             if(comportamientoPaciente<=20){
                 //Log que avisa de que se va por cansancio
-                writeLogMessage(paciente_self,"El paciente se ha ido porque se ha cansado de esperar.");
+                writeLogMessage("Paciente","El paciente se ha ido porque se ha cansado de esperar.");
                 //codigo de cuando se va
             }else if(comportamientoPaciente>20&&comportamientoPaciente<=30){
                 //Log que avisa de que se va porque se lo ha pensado mejor
-                writeLogMessage(paciente_self,"El paciente se lo ha pensado mejor y se ha ido.");
+                writeLogMessage("Paciente","El paciente se lo ha pensado mejor y se ha ido.");
                 //codigo de cuando se lo piensa mejor y se va tambien.
             }else{
                 //70% restante
                 int comportamientoPacRestantes=rand()% 100+1;
                 if(comportamientoPacRestantes<=5){
                     //Log que avisa de que ha perdido el turno por ir al baño
-                    writeLogMessage(paciente_self,"El paciente ha ido al baño y ha perdido el turno.");
+                    writeLogMessage("Paciente","El paciente ha ido al baño y ha perdido el turno.");
                     //Codigo de cuando se va al baño y pierde el turno.
                 }else{
                     //Codigo de los pacientes que ni se van ni pierden turno.
@@ -185,7 +185,7 @@ void accionesPaciente(struct Paciente pacientes[]){
         }
         //Libera su posición en cola de solicitudes y se va
         //Escribe en el log
-        writeLogMessage(paciente_self,"El paciente ha terminado de vacunarse y se ha ido.");
+        writeLogMessage("Paciente","El paciente ha terminado de vacunarse y se ha ido.");
         //Fin del hilo Paciente.
     }
 }
@@ -196,29 +196,29 @@ void accionesMedico(pthread_t medico){
     //buscamos al paciente CON REACCIÓN que más tiempo lleve esperando
     for(int i = 0; i < numPacientes; i++){
         //si hay con reaccion
-        if(pacientes[i]){
+        /*if(pacientes[i]){
             break;
         }
             //si no, escogemos al que mas lleve esperando
         else{
             //sino hay pacientes esperando
-            if(pacientes  == null){
+            if(pacientes[i].id == 0){
                 //esperamos 1 segundo
                 sleep(1);
                 //volvemos al primero
                 i = 0;
             }
             break;
-        }
+        }*/
     }
 
     //si hay paciente
-    if(masEsperando != null){
+    if(masEsperando.id != 0){
         masEsperando.atendido = true;
         tipoAtencion = rand()% 100+1;
 
         //Guardar en el log la hora de entrada.
-        writeLogMessage(paciente_self,"Hora de entrada del paciente.");
+        writeLogMessage("Paciente","Hora de entrada del paciente.");
 
         //paciente está en regla
         if(tipoAtencion <= 80){
@@ -227,7 +227,7 @@ void accionesMedico(pthread_t medico){
             //comprueba si participa en el estudio
 
             //motivo finalización atención
-            writeLogMessage(paciente_self,"El paciente fue atendido con éxito.");
+            writeLogMessage("Paciente","El paciente fue atendido con éxito.");
         }
             //paciente está mal identificado
         else if(tipoAtencion > 80 && tipoAtencion <= 90){
@@ -236,7 +236,7 @@ void accionesMedico(pthread_t medico){
             //comprueba si participa en el estudio
 
             //motivo finalización atención
-            writeLogMessage(paciente_self,"El paciente estaba mal identificado.");
+            writeLogMessage("Paciente","El paciente estaba mal identificado.");
         }
             //paciente tiene catarro o gripe
         else{
@@ -246,10 +246,10 @@ void accionesMedico(pthread_t medico){
             //abandonan consultorio
 
             //motivo finalización atención
-            writeLogMessage(paciente_self,"El paciente tenía catarro o gripe.");
+            writeLogMessage("Paciente","El paciente tenía catarro o gripe.");
         }
 
         //finaliza la atención
-        writeLogMessage(paciente_self,"El paciente fue atendido.");
+        writeLogMessage("Paciente","El paciente fue atendido.");
     }
 }
