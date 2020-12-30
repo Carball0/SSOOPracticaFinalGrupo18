@@ -27,6 +27,8 @@ void nuevoPaciente(int signal);
 void accionesPaciente(struct Paciente pacientes[]);
 void accionesEnfermero(char tipo);
 void accionesEstadistico(pthread_t estadistico);
+void accionesMedico(pthread_t medico);
+void accionesMedico2(struct Paciente auxPaciente);
 
 int main(int argc, char** argv) {
 
@@ -189,65 +191,100 @@ void accionesPaciente(struct Paciente pacientes[]){
 }
 
 void accionesMedico(pthread_t medico){
-    struct Paciente masEsperando;
-    int tipoAtencion = 0; //si es reaccion o vacunacion
+    int junior = 0,  medio = 0,  senior = 0; //num pacientes Junior, Medio y Senior
+
     //buscamos al paciente CON REACCIÓN que más tiempo lleve esperando
     for(int i = 0; i < numPacientes; i++){
         //si hay con reaccion
-        /*if(pacientes[i]){
+        /*if(paciente tiene reaccion){
+            accionesMedico2(pacientes[i]);
             break;
         }
             //si no, escogemos al que mas lleve esperando
         else{
+           for(int j = 0; j < numPacientes; j++){
+                if(pacientes[j].tipo == 'J') {
+                    junior++;
+                }
+                else if(pacientes[j].tipo == 'M') {
+                    medio++;
+                }
+                else {
+                    senior++;
+                }
+            }
+            for(int k = 0; k < numPacientes; k++){
+                if(pacientes[k].tipo == 'J' && junior >= medio && junior >=senior) {
+                    accionesMedico2(pacientes[k]);
+                    break;
+                }
+
+                else if(pacientes[k].tipo == 'M' && medio >= junior && medio >=senior){
+                    accionesMedico2(pacientes[k]);
+                    break;
+                }
+
+                else if(pacientes[k].tipo == 'S' && senior >= junior && senior >= medio){
+                    accionesMedico2(pacientes[k]);
+                    break;
+                }
+            }
             //sino hay pacientes esperando
-            if(pacientes[i].id == 0){
+            if(junior == 0 && medio == 0 && senior == 0){
                 //esperamos 1 segundo
                 sleep(1);
                 //volvemos al primero
                 i = 0;
             }
-            break;
         }*/
     }
 
-    //si hay paciente
-    if(masEsperando.id != 0){
-        masEsperando.atendido = true;
-        tipoAtencion = rand()% 100+1;
 
-        //Guardar en el log la hora de entrada.
-        writeLogMessage("Paciente","Hora de entrada del paciente.");
+}
 
-        //paciente está en regla
-        if(tipoAtencion <= 80){
-            //el tiempo de espera está entre 1 y 4 segundos
-            //comprueba si hay reaccion
-            //comprueba si participa en el estudio
+void accionesMedico2(struct Paciente auxPaciente){
+    int tipoAtencion = 0; //si es reaccion o vacunacion
+    int tiempoEspera = 0; //tiempo que espera el paciente
+    auxPaciente.atendido = true;
 
-            //motivo finalización atención
-            writeLogMessage("Paciente","El paciente fue atendido con éxito.");
-        }
-            //paciente está mal identificado
-        else if(tipoAtencion > 80 && tipoAtencion <= 90){
-            //el tiempo de espera está entre 2 y 6 segundos
-            //comprueba si hay reaccion
-            //comprueba si participa en el estudio
+    tipoAtencion = rand()% 100+1;
 
-            //motivo finalización atención
-            writeLogMessage("Paciente","El paciente estaba mal identificado.");
-        }
-            //paciente tiene catarro o gripe
-        else{
-            //el tiempo de espera está entre 6 y 10 segundos
-            //no se vacunan
-            //no participan en el estudio
-            //abandonan consultorio
+    //Guardar en el log la hora de entrada.
+    writeLogMessage("Paciente","Hora de entrada del paciente.");
 
-            //motivo finalización atención
-            writeLogMessage("Paciente","El paciente tenía catarro o gripe.");
-        }
+    //paciente está en regla
+    if(tipoAtencion <= 80){
+        tiempoEspera =  rand()% 4+1; //el tiempo de espera está entre 1 y 4 segundos
+        //comprueba si hay reaccion
+        //comprueba si participa en el estudio
 
-        //finaliza la atención
-        writeLogMessage("Paciente","El paciente fue atendido.");
+        //motivo finalización atención
+        writeLogMessage("Paciente","El paciente fue atendido con éxito.");
     }
+        //paciente está mal identificado
+    else if(tipoAtencion > 80 && tipoAtencion <= 90){
+        tiempoEspera =  rand()% 5+2; //el tiempo de espera está entre 2 y 6 segundos
+        //comprueba si hay reaccion
+        //comprueba si participa en el estudio
+
+        //motivo finalización atención
+        writeLogMessage("Paciente","El paciente estaba mal identificado.");
+    }
+        //paciente tiene catarro o gripe
+    else{
+        tiempoEspera =  rand()% 5+6; //el tiempo de espera está entre 6 y 10 segundos
+        //no se vacunan
+        //no participan en el estudio
+        //abandona consultorio
+        /*auxPaciente.atendido = 0;
+        auxPaciente.tipo = 0;
+        auxPaciente.serologia = 0;
+        auxPaciente.id = 0;*/
+        //motivo finalización atención
+        writeLogMessage("Paciente","El paciente tenía catarro o gripe.");
+    }
+
+    //finaliza la atención
+    writeLogMessage("Paciente","El paciente fue atendido.");
+
 }
