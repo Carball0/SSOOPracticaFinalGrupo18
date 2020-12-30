@@ -50,31 +50,29 @@ void nuevoPaciente(int signal)
     for(int i = 0;i<MAXPACIENTES;i++){
         if(pacientes[i].id == 0){
             //si hay espacio, creamos un nuevo paciente y lo añadimos al array de pacientes
-            struct Paciente new_paciente;
-            pacientes[i] = new_paciente;
-            //incrementamos el numero de pacientes
-            numPacientes++;
-            new_paciente.id = numPacientes;
-            new_paciente.atendido = false;
+            pacientes[i].id = i;
+            pacientes[i].atendido = false;
             //13 = SIGPIPE; 16 = SIGUSR1; 17 = SIGUSR2
             switch(signal){
-            case 13:
-            //paciente senior
-            new_paciente.tipo = 3;
-            break;
-            case 16:
-            //paciente junior
-            new_paciente.tipo = 1;
-            break;
-            case 17:
-            //paciente medio
-            new_paciente.tipo = 2;
-            break;
+                 case 13:
+                     //paciente senior
+                     pacientes[i].tipo = 3;
+                     break;
+                 case 16:
+                     //paciente junior
+                     pacientes[i].tipo = 1;
+                     break;
+                 case 17:
+                     //paciente medio
+                     pacientes[i].tipo = 2;
+                     break;
             }
-            new_paciente.serologia = false;
+            pacientes[i].serologia = false;
+            pthread_t hilo_paciente;
+            break;
         }
     }
-    }
+}
 //AÑADIR SINCRONIZACION
 void accionesEstadistico(pthread_t estadistico)
 {
