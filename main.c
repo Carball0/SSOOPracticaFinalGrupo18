@@ -7,6 +7,9 @@
 #include <pthread.h>
 #include <stdbool.h>
 
+#define MAXPACIENTES 15
+#define ENFERMEROS 3
+
 struct Paciente {
     int id;
     bool atendido;
@@ -14,7 +17,6 @@ struct Paciente {
     bool serologia;
 };
 
-const int MAXPACIENTES = 15, ENFERMEROS = 3;
 struct Paciente pacientes[MAXPACIENTES];
 int numPacientes, contEnfermero;
 pthread_t medico, estadistico;
