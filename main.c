@@ -180,7 +180,7 @@ void accionesPaciente(struct Paciente pacientes[]){
                 }else{
                     //Codigo de los pacientes que ni se van ni pierden turno.
                     //El paciente debe dormir 3 segundos y vuelve a 4.
-                    sleep(4);
+                    sleep(3);
                 }
             }
         }else{
@@ -197,14 +197,18 @@ void accionesPaciente(struct Paciente pacientes[]){
             if(participaEstudio<=25){
                 //Si decide participar
                 //Cambia el valor de la variable serológica
+                pacientes[i].serologia=true;
                 //Cambia el valor de paciente en estudio.
                 //Avisa al estadistico
                 //Guardamos el log en que está preparado para el estudio
+                writeLogMessage("Paciente","El paciente está preparado para el estudio.");
                 //Se queda esperando a que digan que pueden marchar
                 //Guardamos el log en que deja el estudio
+                writeLogMessage("Paciente","El paciente ha terminado el estudio.");
             }
         }
         //Libera su posición en cola de solicitudes y se va
+        pacientes[i].id=0;
         //Escribe en el log
         writeLogMessage("Paciente","El paciente ha terminado de vacunarse y se ha ido.");
         //Fin del hilo Paciente.
@@ -239,12 +243,10 @@ void accionesMedico(pthread_t medico){
                     accionesMedico2(pacientes[k]);
                     break;
                 }
-
                 else if(pacientes[k].tipo == 'M' && medio >= junior && medio >=senior){
                     accionesMedico2(pacientes[k]);
                     break;
                 }
-
                 else if(pacientes[k].tipo == 'S' && senior >= junior && senior >= medio){
                     accionesMedico2(pacientes[k]);
                     break;
