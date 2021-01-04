@@ -12,7 +12,7 @@
 
 struct Paciente {
     int id;
-    bool atendido;
+    int atendido;
     char tipo;  // Junior J, Medio M, Senior S
     bool serologia;
 };
@@ -148,7 +148,7 @@ void accionesEnfermero(char tipo) { //TODO Semaforos/Mutex/etc
     }
 }
 
-void accionesPaciente(struct Paciente pacientes[]){
+void accionesPaciente(){
     //Guardar en el log la hora de entrada.
     writeLogMessage("Paciente","Hora de entrada del paciente.");
     //Guardar en el log el tipo de solicitud.
