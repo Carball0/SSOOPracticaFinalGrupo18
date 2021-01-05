@@ -3,6 +3,7 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <signal.h>
 #include <time.h>
 #include <pthread.h>
 #include <stdbool.h>
@@ -17,7 +18,12 @@ struct Paciente {
     bool serologia;
 };
 
+struct Enfermero {
+    int id;
+};
+
 struct Paciente pacientes[MAXPACIENTES];
+struct Enfermero enfermeros[ENFERMEROS];
 int numPacientes, contEnfermero;
 pthread_t medico, estadistico;
 pthread_t enfermero;
@@ -25,6 +31,7 @@ pthread_t enfermero;
 FILE* logFile;
 
 void writeLogMessage(char *id, char *msg);
+void mainHandler(int signal);
 void nuevoPaciente(int signal);
 void accionesPaciente(struct Paciente pacientes[]);
 void accionesEnfermero(char tipo);
@@ -34,10 +41,37 @@ void accionesMedico2(struct Paciente auxPaciente);
 void *HiloPaciente(void *arg);
 
 int main(int argc, char** argv) {
+    signal(SIGUSR1, mainHandler);   //Junior
+    signal(SIGUSR2, mainHandler);   //Medio
+    signal(SIGPIPE, mainHandler);   //Senior
+    signal(SIGINT, mainHandler);    //Terminar programa
 
-    //pthread_create(&hilo,NULL,funcion que hace la accion del hilo,parametros a pasar); -> crear el hilo
-    //pthread_join(hilo,NULL); -> sirve para que el main espere a la accion del hilo
+    //TODO Inicializar semaforos/mutex/var condicion no implementadas todavía
+    for(int i=0; i<MAXPACIENTES; i++) {
+        pacientes[i].id = 0;
+        pacientes[i].atendido = 0;
+        pacientes[i].tipo = '0';
+        pacientes[i].serologia = false;
+    }
+    for(int i=0; i<ENFERMEROS; i++) {
+        enfermeros[i].id = 0;
+    }
 
+    /* TODO Creación de threads paientes, enfermeros y medico
+     * Revisar como asociar struct al thread en pacientes y enfermero
+     * Se puede hacer añadiendo el thread a las variables del struct:
+     * struct Paciente {                struct Enfermero {
+     *      ...                              ...
+     *      pthread_t paciente;              pthread_t enfermero;
+     *      ...                              ...
+     *  }                                }
+     * El thread se inicializaría de la siguiente manera: en los pacientes
+     * se inicializa en el handler cuando se reciba un signal, y los enfermeros
+     * se inicializan en el for de arriba, modificando el thread asociado a
+     * cada paciente/enfermero.
+     */
+    
+    logFile = fopen("logfile.txt", "w+"); //Abre log para escribir en modo escritura
 }
 
 void writeLogMessage(char *id, char *msg) {
@@ -51,6 +85,25 @@ void writeLogMessage(char *id, char *msg) {
     fprintf(logFile, "[%s] %s: %s\n", stnow, id, msg);
     fclose(logFile);
 }
+
+void mainHandler(int signal) {
+    switch(signal) {
+        case SIGUSR1:
+            //Generar paciente Junior
+            break;
+        case SIGUSR2:
+            //Generar paciente Medio
+            break;
+        case SIGPIPE:
+            //Generar paciente Senior
+            break;
+        case SIGINT:
+            //Salir del programa
+            exit(0);
+            break;
+    }
+}
+
 //CAMBIAR NOMBRE NEW PACIENTE Y CREAR EL HILO
 //metodo que comprueba si hay sitio para la llegada de un nuevo paciente, y en ese caso lo crea
 void nuevoPaciente(int signal)
