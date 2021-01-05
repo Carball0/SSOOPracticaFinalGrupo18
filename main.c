@@ -20,7 +20,7 @@ struct Paciente {
 struct Paciente pacientes[MAXPACIENTES];
 int numPacientes, contEnfermero;
 pthread_t medico, estadistico;
-pthread_t enfermeros[];
+pthread_t enfermero;
 
 FILE* logFile;
 
@@ -31,8 +31,12 @@ void accionesEnfermero(char tipo);
 void accionesEstadistico(pthread_t estadistico);
 void accionesMedico(pthread_t medico);
 void accionesMedico2(struct Paciente auxPaciente);
+void *HiloPaciente(void *arg);
 
 int main(int argc, char** argv) {
+
+    //pthread_create(&hilo,NULL,funcion que hace la accion del hilo,parametros a pasar); -> crear el hilo
+    //pthread_join(hilo,NULL); -> sirve para que el main espere a la accion del hilo
 
 }
 
@@ -51,6 +55,7 @@ void writeLogMessage(char *id, char *msg) {
 //metodo que comprueba si hay sitio para la llegada de un nuevo paciente, y en ese caso lo crea
 void nuevoPaciente(int signal)
 {
+    struct Paciente p;
     for(int i = 0;i<MAXPACIENTES;i++){
         if(pacientes[i].id == 0){
             //si hay espacio, creamos un nuevo paciente y lo añadimos al array de pacientes
@@ -72,10 +77,20 @@ void nuevoPaciente(int signal)
                     break;
             }
             pacientes[i].serologia = false;
+            p.serologia = false;
+            p.atendido = false;
+            p.id = i;
+            p.tipo = pacientes[i].tipo;
             pthread_t hilo_paciente;
+            pthread_create(&hilo_paciente,NULL,HiloPaciente,(void *)&p);
             break;
         }
     }
+}
+//funcion de la rutina del hilo de pacientes
+void *HiloPaciente(void *arg)
+{
+    printf("\nSe está ejecutando el hilo del paciente");
 }
 //AÑADIR SINCRONIZACION
 void accionesEstadistico(pthread_t estadistico)
