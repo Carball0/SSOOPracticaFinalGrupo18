@@ -27,7 +27,7 @@ struct Enfermero enfermeros[ENFERMEROS];
 int numPacientes, contEnfermero;
 pthread_t medico, estadistico;
 pthread_t enfermero;
-
+pthread_mutex_t mutex_hilos;
 FILE* logFile;
 
 void writeLogMessage(char *id, char *msg);
@@ -41,11 +41,7 @@ void accionesMedico2(struct Paciente auxPaciente);
 void *HiloPaciente(void *arg);
 
 int main(int argc, char** argv) {
-    signal(SIGUSR1, mainHandler);   //Junior
-    signal(SIGUSR2, mainHandler);   //Medio
-    signal(SIGPIPE, mainHandler);   //Senior
-    signal(SIGINT, mainHandler);    //Terminar programa
-
+    logFile = fopen("logfile.txt", "w+"); //Abre log para escribir en modo escritura
     //TODO Inicializar semaforos/mutex/var condicion no implementadas todavía
     for(int i=0; i<MAXPACIENTES; i++) {
         pacientes[i].id = 0;
@@ -56,22 +52,42 @@ int main(int argc, char** argv) {
     for(int i=0; i<ENFERMEROS; i++) {
         enfermeros[i].id = 0;
     }
+    //inicializacion del mutex
+    //para usarlo: pthread_mutex_lock(&mutex_hilos) y lo mismo con unlock
+    pthread_mutex_init(&mutex_hilos,NULL);
 
-    /* TODO Creación de threads paientes, enfermeros y medico
-     * Revisar como asociar struct al thread en pacientes y enfermero
-     * Se puede hacer añadiendo el thread a las variables del struct:
-     * struct Paciente {                struct Enfermero {
-     *      ...                              ...
-     *      pthread_t paciente;              pthread_t enfermero;
-     *      ...                              ...
-     *  }                                }
-     * El thread se inicializaría de la siguiente manera: en los pacientes
-     * se inicializa en el handler cuando se reciba un signal, y los enfermeros
-     * se inicializan en el for de arriba, modificando el thread asociado a
-     * cada paciente/enfermero.
-     */
-    
-    logFile = fopen("logfile.txt", "w+"); //Abre log para escribir en modo escritura
+    /*VARIABLE CONDICION(REVISAR Y CAMBIAR NOMBRE)
+    *basicamente es una variable inicializada a 0 que segun quien la use aumenta su valor,
+    * lo disminuye, o espera a que tenga un valor
+    */
+    int variable_condicion = 0;
+
+    //bucle que espera señales infinitamente
+    while(true){
+        signal(SIGUSR1, mainHandler);   //Junior
+        signal(SIGUSR2, mainHandler);   //Medio
+        signal(SIGPIPE, mainHandler);   //Senior
+        signal(SIGINT, mainHandler);    //Terminar programa
+
+
+
+        /* TODO Creación de threads pacientes, enfermeros y medico
+         * Revisar como asociar struct al thread en pacientes y enfermero
+         * Se puede hacer añadiendo el thread a las variables del struct:
+         * struct Paciente {                struct Enfermero {
+         *      ...                              ...
+         *      pthread_t paciente;              pthread_t enfermero;
+         *      ...                              ...
+         *  }                                }
+         * El thread se inicializaría de la siguiente manera: en los pacientes
+         * se inicializa en el handler cuando se reciba un signal, y los enfermeros
+         * se inicializan en el for de arriba, modificando el thread asociado a
+         * cada paciente/enfermero.
+         */
+
+    }
+
+
 }
 
 void writeLogMessage(char *id, char *msg) {
@@ -90,12 +106,15 @@ void mainHandler(int signal) {
     switch(signal) {
         case SIGUSR1:
             //Generar paciente Junior
+            nuevoPaciente(SIGUSR1);
             break;
         case SIGUSR2:
             //Generar paciente Medio
+            nuevoPaciente(SIGUSR2);
             break;
         case SIGPIPE:
             //Generar paciente Senior
+            nuevoPaciente(SIGPIPE);
             break;
         case SIGINT:
             //Salir del programa
@@ -104,16 +123,15 @@ void mainHandler(int signal) {
     }
 }
 
-//CAMBIAR NOMBRE NEW PACIENTE Y CREAR EL HILO
 //metodo que comprueba si hay sitio para la llegada de un nuevo paciente, y en ese caso lo crea
 void nuevoPaciente(int signal)
 {
     struct Paciente p;
-    for(int i = 0;i<MAXPACIENTES;i++){
+    for(int i = 1;i<=MAXPACIENTES;i++){
         if(pacientes[i].id == 0){
             //si hay espacio, creamos un nuevo paciente y lo añadimos al array de pacientes
             pacientes[i].id = i;
-            pacientes[i].atendido = false;
+            pacientes[i].atendido = 0;
             //13 = SIGPIPE; 16 = SIGUSR1; 17 = SIGUSR2
             switch(signal){
                 case 13:
@@ -131,11 +149,11 @@ void nuevoPaciente(int signal)
             }
             pacientes[i].serologia = false;
             p.serologia = false;
-            p.atendido = false;
+            p.atendido = 0;
             p.id = i;
             p.tipo = pacientes[i].tipo;
             pthread_t hilo_paciente;
-            pthread_create(&hilo_paciente,NULL,HiloPaciente,(void *)&p);
+            pthread_create(&hilo_paciente,NULL,accionesPaciente,(void *)&p);
             break;
         }
     }
