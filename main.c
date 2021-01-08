@@ -312,16 +312,20 @@ void accionesPaciente(){
 
 void accionesMedico(pthread_t medico){
     int junior = 0,  medio = 0,  senior = 0; //num pacientes Junior, Medio y Senior
-
+    pthread_mutex_lock(&mutex_hilos);
     //buscamos al paciente CON REACCIÓN que más tiempo lleve esperando
     for(int i = 0; i < numPacientes; i++){
         //si hay con reaccion
-        /*if(paciente tiene reaccion){
-            accionesMedico2(pacientes[i]);
+        if(pacientes[i].atendido == 4){
+            sleep(5);
+            pacientes[i].id = 0;
+            pacientes[i].serologia = 0;
+            pacientes[i].tipo = 0;
+            pacientes[i].atendido = 0;
             break;
         }
-            //si no, escogemos al que mas lleve esperando
-        else{
+        //si no, escogemos al que mas lleve esperando
+        else{//calculamos la cola con mas solicitudes
            for(int j = 0; j < numPacientes; j++){
                 if(pacientes[j].tipo == 'J') {
                     junior++;
@@ -333,7 +337,7 @@ void accionesMedico(pthread_t medico){
                     senior++;
                 }
             }
-            for(int k = 0; k < numPacientes; k++){
+            for(int k = 0; k < numPacientes; k++){//atendemos a aquel de la cola con mas solicitudes y que mas tiempo lleve esperando
                 if(pacientes[k].tipo == 'J' && junior >= medio && junior >=senior) {
                     accionesMedico2(pacientes[k]);
                     break;
@@ -354,18 +358,19 @@ void accionesMedico(pthread_t medico){
                 //volvemos al primero
                 i = 0;
             }
-        }*/
+        }
     }
-
-
+    pthread_mutex_unlock(&mutex_hilos);
 }
 
 void accionesMedico2(struct Paciente auxPaciente){
     int tipoAtencion = 0; //si es reaccion o vacunacion
     int tiempoEspera = 0; //tiempo que espera el paciente
-    auxPaciente.atendido = true;
+    int tieneReaccion = rand()% 100+1; //si este valor es <=10 tiene reaccion
+    int vaAlEstudio= rand()% 100+1; //si este valor es <= 25 va al estudio serologico
+    //auxPaciente.atendido = 1; como poner si esta atendido?
 
-    tipoAtencion = rand()% 100+1;
+    tipoAtencion = rand()% 100+1;//calculamos el tipo de atencion
 
     //Guardar en el log la hora de entrada.
     writeLogMessage("Paciente","Hora de entrada del paciente.");
@@ -373,8 +378,15 @@ void accionesMedico2(struct Paciente auxPaciente){
     //paciente está en regla
     if(tipoAtencion <= 80){
         tiempoEspera =  rand()% 4+1; //el tiempo de espera está entre 1 y 4 segundos
-        //comprueba si hay reaccion
-        //comprueba si participa en el estudio
+        sleep(tiempoEspera);
+
+        if(tieneReaccion <= 10) {//comprueba si hay reaccion
+            auxPaciente.atendido = 4;
+        }
+        if(vaAlEstudio <= 25) {//comprueba si participa en el estudio
+            auxPaciente.serologia = 1;
+            //pasarle señal al estadistico
+        }
 
         //motivo finalización atención
         writeLogMessage("Paciente","El paciente fue atendido con éxito.");
@@ -382,15 +394,23 @@ void accionesMedico2(struct Paciente auxPaciente){
         //paciente está mal identificado
     else if(tipoAtencion > 80 && tipoAtencion <= 90){
         tiempoEspera =  rand()% 5+2; //el tiempo de espera está entre 2 y 6 segundos
-        //comprueba si hay reaccion
-        //comprueba si participa en el estudio
+        sleep(tiempoEspera);
 
-        //motivo finalización atención
+        if(tieneReaccion <= 10) {//comprueba si hay reaccion
+            auxPaciente.atendido = 4;
+        }
+        if(vaAlEstudio <= 25) {//comprueba si participa en el estudio
+            auxPaciente.serologia = 1;
+            //pasarle señal al estadistico
+        }
+
+        //motivo finalización atencion
         writeLogMessage("Paciente","El paciente estaba mal identificado.");
     }
         //paciente tiene catarro o gripe
     else{
         tiempoEspera =  rand()% 5+6; //el tiempo de espera está entre 6 y 10 segundos
+        sleep(tiempoEspera);
         //no se vacunan
         //no participan en el estudio
         //abandona consultorio
