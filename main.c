@@ -20,6 +20,7 @@ struct Paciente {
 
 struct Enfermero {
     int id;
+    char tipo;  // Junior J, Medio M, Senior S
 };
 
 struct Paciente pacientes[MAXPACIENTES];
@@ -28,20 +29,24 @@ int numPacientes, contEnfermero;
 pthread_t medico, estadistico;
 pthread_t enfermero;
 pthread_mutex_t mutex_hilos;
+pthread_mutex_t enfMutex[ENFERMEROS];
 FILE* logFile;
 
 void writeLogMessage(char *id, char *msg);
 void mainHandler(int signal);
 void nuevoPaciente(int signal);
 void accionesPaciente();
-void accionesEnfermero(char tipo);
+void accionesEnfermero(char tipo, int id);
 void accionesEstadistico(pthread_t estadistico);
 void accionesMedico(pthread_t medico);
 void accionesMedico2(struct Paciente auxPaciente);
 void *HiloPaciente(void *arg);
 
+_Noreturn void *HiloEnfermero(void *arg);
+
 int main(int argc, char** argv) {
     logFile = fopen("logfile.txt", "w+"); //Abre log para escribir en modo escritura
+
     //TODO Inicializar semaforos/mutex/var condicion no implementadas todavía
     for(int i=0; i<MAXPACIENTES; i++) {
         pacientes[i].id = 0;
@@ -49,8 +54,11 @@ int main(int argc, char** argv) {
         pacientes[i].tipo = '0';
         pacientes[i].serologia = false;
     }
+
     for(int i=0; i<ENFERMEROS; i++) {
-        enfermeros[i].id = 0;
+        enfermeros[i].id = i+1;
+        pthread_mutex_init(&enfMutex[i], NULL);
+        pthread_create(&enfermero, NULL, HiloEnfermero, (void *)&enfermeros[i]);
     }
     //inicializacion del mutex
     //para usarlo: pthread_mutex_lock(&mutex_hilos) y lo mismo con unlock
@@ -62,15 +70,7 @@ int main(int argc, char** argv) {
     */
     int variable_condicion = 0;
 
-    struct Enfermero e1,e2,e3;
-    e1.id = 1;
-    e2.id = 2;
-    e3.id = 3;
-
-    pthread_create(&medico,NULL,accionesMedico(),NULL);
-    pthread_create(&enfermero,NULL,accionesEnfermero(),(void *)&e1);
-    pthread_create(&enfermero,NULL,accionesEnfermero(),(void *)&e2);
-    pthread_create(&enfermero,NULL,accionesEnfermero(),(void *)&e3);
+    // ---------- pthread_create(&medico,NULL,accionesMedico(),NULL);
 
     //bucle que espera señales infinitamente
     while(true){
@@ -168,10 +168,23 @@ void nuevoPaciente(int signal)
     }
 }
 //funcion de la rutina del hilo de pacientes
-void *HiloPaciente(void *arg)
-{
+void *HiloPaciente(void *arg) {
     printf("\nSe está ejecutando el hilo del paciente");
 }
+
+void *HiloEnfermero(void *arg) {
+    struct Enfermero *enfermero = arg;
+    writeLogMessage("Enfermer@", "El hilo acaba de comenzar");
+    pthread_mutex_lock(&enfMutex[enfermero->id]);
+    int id = enfermero->id;
+    char tipo = enfermero->tipo;
+    pthread_mutex_unlock(&enfMutex[id]);
+    while(1) {
+        accionesEnfermero(tipo, id);
+    }
+
+}
+
 //AÑADIR SINCRONIZACION
 void accionesEstadistico(pthread_t estadistico)
 {
@@ -185,7 +198,7 @@ void accionesEstadistico(pthread_t estadistico)
 //cambia paciente en estudio y vuelve a 1 (EXCLUSION MUTUA)
 }
 
-void accionesEnfermero(char tipo) { //TODO Semaforos/Mutex/etc
+void accionesEnfermero(char tipo, int id) { //TODO Semaforos/Mutex/etc
     srand(time(NULL));
     struct Paciente pacVacio;
     bool otroTipo = true;  //True si no se ha atendido a un apciente de su tipo y va a otro rango de edad
@@ -227,12 +240,12 @@ void accionesEnfermero(char tipo) { //TODO Semaforos/Mutex/etc
         }
         if(vacio) { //TODO Revisar si esta accion se ha de realizar en thread y no en funcion
             sleep(1);
-            accionesEnfermero(tipo);
+            accionesEnfermero(tipo, id);
             return;
         } else if(otroTipo) {  //Atendemos a otro paciente de otro rango de edad
             for(int j = 0; j<MAXPACIENTES; j++) {
                 if(!pacientes[j].atendido) {
-                    accionesEnfermero(pacientes[j].tipo);
+                    accionesEnfermero(pacientes[j].tipo, id);
                     return;
                 }
             }
