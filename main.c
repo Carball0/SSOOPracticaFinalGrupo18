@@ -33,7 +33,7 @@ FILE* logFile;
 void writeLogMessage(char *id, char *msg);
 void mainHandler(int signal);
 void nuevoPaciente(int signal);
-void accionesPaciente(struct Paciente pacientes[]);
+void accionesPaciente();
 void accionesEnfermero(char tipo);
 void accionesEstadistico(pthread_t estadistico);
 void accionesMedico(pthread_t medico);
@@ -62,14 +62,22 @@ int main(int argc, char** argv) {
     */
     int variable_condicion = 0;
 
+    struct Enfermero e1,e2,e3;
+    e1.id = 1;
+    e2.id = 2;
+    e3.id = 3;
+
+    pthread_create(&medico,NULL,accionesMedico(),NULL);
+    pthread_create(&enfermero,NULL,accionesEnfermero(),(void *)&e1);
+    pthread_create(&enfermero,NULL,accionesEnfermero(),(void *)&e2);
+    pthread_create(&enfermero,NULL,accionesEnfermero(),(void *)&e3);
+
     //bucle que espera señales infinitamente
     while(true){
         signal(SIGUSR1, mainHandler);   //Junior
         signal(SIGUSR2, mainHandler);   //Medio
         signal(SIGPIPE, mainHandler);   //Senior
         signal(SIGINT, mainHandler);    //Terminar programa
-
-
 
         /* TODO Creación de threads pacientes, enfermeros y medico
          * Revisar como asociar struct al thread en pacientes y enfermero
@@ -133,16 +141,17 @@ void nuevoPaciente(int signal)
             pacientes[i].id = i;
             pacientes[i].atendido = 0;
             //13 = SIGPIPE; 16 = SIGUSR1; 17 = SIGUSR2
+            //TODO comprobar que funciona el switch, sino poner casos para todos los numeros posibles
             switch(signal){
-                case 13:
+                case SIGPIPE:
                     //paciente senior
                     pacientes[i].tipo = 3;
                     break;
-                case 16:
+                case SIGUSR1:
                     //paciente junior
                     pacientes[i].tipo = 1;
                     break;
-                case 17:
+                case SIGUSR2:
                     //paciente medio
                     pacientes[i].tipo = 2;
                     break;
