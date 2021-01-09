@@ -7,6 +7,7 @@
 #include <time.h>
 #include <pthread.h>
 #include <stdbool.h>
+#include <string.h>
 
 #define MAXPACIENTES 15
 #define ENFERMEROS 3
@@ -35,14 +36,14 @@ FILE* logFile;
 void writeLogMessage(char *id, char *msg);
 void mainHandler(int signal);
 void nuevoPaciente(int signal);
-void accionesPaciente();
+void *accionesPaciente(void *arg);
 void accionesEnfermero(char tipo, int id);
 void accionesEstadistico(pthread_t estadistico);
 void accionesMedico(pthread_t medico);
 void accionesMedico2(struct Paciente auxPaciente);
 void *HiloPaciente(void *arg);
 
-_Noreturn void *HiloEnfermero(void *arg);
+void *HiloEnfermero(void *arg);
 
 int main(int argc, char** argv) {
     logFile = fopen("logfile.txt", "w+"); //Abre log para escribir en modo escritura
@@ -256,71 +257,85 @@ void accionesEnfermero(char tipo, int id) { //TODO Semaforos/Mutex/etc
     }
 }
 
-void accionesPaciente(){
+void *accionesPaciente(void *arg){
+    struct Paciente *p;
+    p=(struct Paciente *)arg;
     //Guardar en el log la hora de entrada.
     writeLogMessage("Paciente","Hora de entrada del paciente.");
     //Guardar en el log el tipo de solicitud.
-    writeLogMessage("Paciente","Tipo de solicitud del paciente.");
+    char mensajeTipoPaciente[50];
+    char tipoPaciente[]="Tipo de solicitud del paciente : ";
+    strcpy(mensajeTipoPaciente,tipoPaciente);
+    strcat(mensajeTipoPaciente,p->tipo);
+    writeLogMessage("Paciente",mensajeTipoPaciente);
     //Duerme 3 segundos
     sleep(3);
     //Comprueba si está siendo atendido.
     //Si no lo está, calculamos el comportamiento del paciente (si se va por cansarse
     //de esperar, si se lo piensa mejor) o si se va al baño y pierde su turno.
-    for(int i=0;i<MAXPACIENTES;i++){
-        if(pacientes[i].atendido==false){
-            int comportamientoPaciente=rand()% 100+1;
-            //un 20 % de los pacientes se cansa de esperar y se va.
-            if(comportamientoPaciente<=20){
-                //Log que avisa de que se va por cansancio
-                writeLogMessage("Paciente","El paciente se ha ido porque se ha cansado de esperar.");
-                //codigo de cuando se va
-            }else if(comportamientoPaciente>20&&comportamientoPaciente<=30){
-                //Log que avisa de que se va porque se lo ha pensado mejor
-                writeLogMessage("Paciente","El paciente se lo ha pensado mejor y se ha ido.");
-                //codigo de cuando se lo piensa mejor y se va tambien.
+    if(p->atendido==0){
+        int comportamientoPaciente=rand()% 100+1;
+        //un 20 % de los pacientes se cansa de esperar y se va.
+        if(comportamientoPaciente<=20){
+            //Log que avisa de que se va por cansancio
+            writeLogMessage("Paciente","El paciente se ha ido porque se ha cansado de esperar.");
+            //codigo de cuando se va
+            pthread_exit(NULL);
+        }else if(comportamientoPaciente>20&&comportamientoPaciente<=30){
+            //Log que avisa de que se va porque se lo ha pensado mejor
+            writeLogMessage("Paciente","El paciente se lo ha pensado mejor y se ha ido.");
+            //codigo de cuando se lo piensa mejor y se va tambien.
+            pthread_exit(NULL);
+        }else{
+            //70% restante
+            int comportamientoPacRestantes=rand()% 100+1;
+            if(comportamientoPacRestantes<=5){
+                //Log que avisa de que ha perdido el turno por ir al baño
+                writeLogMessage("Paciente","El paciente ha ido al baño y ha perdido el turno.");
+                //Codigo de cuando se va al baño y pierde el turno.
+                pthread_exit(NULL);
             }else{
-                //70% restante
-                int comportamientoPacRestantes=rand()% 100+1;
-                if(comportamientoPacRestantes<=5){
-                    //Log que avisa de que ha perdido el turno por ir al baño
-                    writeLogMessage("Paciente","El paciente ha ido al baño y ha perdido el turno.");
-                    //Codigo de cuando se va al baño y pierde el turno.
-                }else{
-                    //Codigo de los pacientes que ni se van ni pierden turno.
-                    //El paciente debe dormir 3 segundos y vuelve a 4.
-                    sleep(3);
-                }
-            }
-        }else{
-            //Si está siendo atendido por el enfermer@ debemos esperar a que termine.
-        }
-        //Si no se va por gripe o catarro calcula si le da reacción
-        int reaccionPaciente=rand()% 100+1;
-        if(reaccionPaciente<=10){
-            //Si le da cambia el valor de atendido a 4
-            //Esperamos a que termine la atención
-        }else{
-            //Si no le da reacción calculamos si decide o no participar en el estudio serológico
-            int participaEstudio=rand()% 100+1;
-            if(participaEstudio<=25){
-                //Si decide participar
-                //Cambia el valor de la variable serológica
-                pacientes[i].serologia=true;
-                //Cambia el valor de paciente en estudio.
-                //Avisa al estadistico
-                //Guardamos el log en que está preparado para el estudio
-                writeLogMessage("Paciente","El paciente está preparado para el estudio.");
-                //Se queda esperando a que digan que pueden marchar
-                //Guardamos el log en que deja el estudio
-                writeLogMessage("Paciente","El paciente ha terminado el estudio.");
+                //Codigo de los pacientes que ni se van ni pierden turno.
+                //El paciente debe dormir 3 segundos y vuelve a 4.
+                sleep(3);
+                p->atendido==4;
             }
         }
-        //Libera su posición en cola de solicitudes y se va
-        pacientes[i].id=0;
-        //Escribe en el log
-        writeLogMessage("Paciente","El paciente ha terminado de vacunarse y se ha ido.");
-        //Fin del hilo Paciente.
+    }else{
+        //Si está siendo atendido por el enfermer@ debemos esperar a que termine.
+
     }
+    //Si no se va por gripe o catarro calcula si le da reacción
+    int reaccionPaciente=rand()% 100+1;
+    if(reaccionPaciente<=10){
+        //Si le da cambia el valor de atendido a 4
+        p->atendido=4;
+        //Esperamos a que termine la atención
+
+    }else{
+        //Si no le da reacción calculamos si decide o no participar en el estudio serológico
+        int participaEstudio=rand()% 100+1;
+        if(participaEstudio<=25){
+            //Si decide participar
+            //Cambia el valor de la variable serológica
+            p->serologia=true;
+            //Cambia el valor de paciente en estudio.
+            //Avisa al estadistico
+            pthread_cond_t condicion;
+            pthread_cond_signal(&condicion);
+            //Guardamos el log en que está preparado para el estudio
+            writeLogMessage("Paciente","El paciente está preparado para el estudio.");
+            //Se queda esperando a que digan que pueden marchar
+
+            //Guardamos el log en que deja el estudio
+            writeLogMessage("Paciente","El paciente ha terminado el estudio.");
+        }
+    }
+    //Libera su posición en cola de solicitudes y se va
+    p->id=0;
+    //Escribe en el log
+    writeLogMessage("Paciente","El paciente ha terminado de vacunarse y se ha ido.");
+    //Fin del hilo Paciente.
 }
 
 void accionesMedico(pthread_t medico){
@@ -337,9 +352,9 @@ void accionesMedico(pthread_t medico){
             pacientes[i].atendido = 0;
             break;
         }
-        //si no, escogemos al que mas lleve esperando
+            //si no, escogemos al que mas lleve esperando
         else{//calculamos la cola con mas solicitudes
-           for(int j = 0; j < numPacientes; j++){
+            for(int j = 0; j < numPacientes; j++){
                 if(pacientes[j].tipo == 'J') {
                     junior++;
                 }
