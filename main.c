@@ -32,6 +32,7 @@ pthread_t enfermero;
 pthread_mutex_t mutex_hilos;
 pthread_mutex_t enfMutex[ENFERMEROS];
 FILE* logFile;
+pthread_cond_t condicion;
 
 void writeLogMessage(char *id, char *msg);
 void mainHandler(int signal);
@@ -61,6 +62,7 @@ int main(int argc, char** argv) {
         pthread_mutex_init(&enfMutex[i], NULL);
         pthread_create(&enfermero, NULL, HiloEnfermero, (void *)&enfermeros[i]);
     }
+
     //inicializacion del mutex
     //para usarlo: pthread_mutex_lock(&mutex_hilos) y lo mismo con unlock
     pthread_mutex_init(&mutex_hilos,NULL);
@@ -69,12 +71,11 @@ int main(int argc, char** argv) {
     *basicamente es una variable inicializada a 0 que segun quien la use aumenta su valor,
     * lo disminuye, o espera a que tenga un valor
     */
-    int variable_condicion = 0;
 
-    // ---------- pthread_create(&medico,NULL,accionesMedico(),NULL);
+    pthread_create(&medico,NULL,accionesMedico,NULL);
 
     //bucle que espera señales infinitamente
-    while(true){
+    while(1){
         signal(SIGUSR1, mainHandler);   //Junior
         signal(SIGUSR2, mainHandler);   //Medio
         signal(SIGPIPE, mainHandler);   //Senior
@@ -146,15 +147,15 @@ void nuevoPaciente(int signal)
             switch(signal){
                 case SIGPIPE:
                     //paciente senior
-                    pacientes[i].tipo = 3;
+                    pacientes[i].tipo = 'S';
                     break;
                 case SIGUSR1:
                     //paciente junior
-                    pacientes[i].tipo = 1;
+                    pacientes[i].tipo = 'J';
                     break;
                 case SIGUSR2:
                     //paciente medio
-                    pacientes[i].tipo = 2;
+                    pacientes[i].tipo = 'M';
                     break;
             }
             pacientes[i].serologia = false;
@@ -168,15 +169,11 @@ void nuevoPaciente(int signal)
         }
     }
 }
-//funcion de la rutina del hilo de pacientes
-void *HiloPaciente(void *arg) {
-    printf("\nSe está ejecutando el hilo del paciente");
-}
 
 void *HiloEnfermero(void *arg) {
+    pthread_mutex_lock(&enfMutex[enfermero->id]);
     struct Enfermero *enfermero = arg;
     writeLogMessage("Enfermer@", "El hilo acaba de comenzar");
-    pthread_mutex_lock(&enfMutex[enfermero->id]);
     int id = enfermero->id;
     char tipo = enfermero->tipo;
     pthread_mutex_unlock(&enfMutex[id]);
@@ -189,14 +186,18 @@ void *HiloEnfermero(void *arg) {
 //AÑADIR SINCRONIZACION
 void accionesEstadistico(pthread_t estadistico)
 {
+    pthread_wait();
 //espera que le avisen de que hay un paciente en estudio (EXCLUSION MUTUA)
 //escribe en el log el comienzo de actividad (EXCLUSION MUTUA)
+    pthread_mutex_lock(&mutex_hilos);
     writeLogMessage("Estadistico","Comienzo de actividad del estadistico.");
 //calcula el tiempo de actividad
+    sleep(4);
 //termina la actividad y avisa al paciente (VARIABLES CONDICION)
 //escribe en el log que finaliza la actividad (EXCLUSION MUTUA)
     writeLogMessage("Estadistico","Fin de actividad del estadistico.");
 //cambia paciente en estudio y vuelve a 1 (EXCLUSION MUTUA)
+    pthread_mutex_unlock(&mutex_hilos);
 }
 
 void accionesEnfermero(char tipo, int id) { //TODO Semaforos/Mutex/etc
@@ -280,11 +281,13 @@ void *accionesPaciente(void *arg){
             //Log que avisa de que se va por cansancio
             writeLogMessage("Paciente","El paciente se ha ido porque se ha cansado de esperar.");
             //codigo de cuando se va
+            //TODO PONER ID A 0
             pthread_exit(NULL);
         }else if(comportamientoPaciente>20&&comportamientoPaciente<=30){
             //Log que avisa de que se va porque se lo ha pensado mejor
             writeLogMessage("Paciente","El paciente se lo ha pensado mejor y se ha ido.");
             //codigo de cuando se lo piensa mejor y se va tambien.
+            //PONER DATOS A 0
             pthread_exit(NULL);
         }else{
             //70% restante
@@ -298,7 +301,7 @@ void *accionesPaciente(void *arg){
                 //Codigo de los pacientes que ni se van ni pierden turno.
                 //El paciente debe dormir 3 segundos y vuelve a 4.
                 sleep(3);
-                p->atendido==4;
+                p->atendido=4;
             }
         }
     }else{
@@ -306,6 +309,7 @@ void *accionesPaciente(void *arg){
 
     }
     //Si no se va por gripe o catarro calcula si le da reacción
+    //TIENE QUE ESPERAR INFORMACION DEL MEDICO Y/O ENFERMEROS
     int reaccionPaciente=rand()% 100+1;
     if(reaccionPaciente<=10){
         //Si le da cambia el valor de atendido a 4
@@ -321,7 +325,6 @@ void *accionesPaciente(void *arg){
             p->serologia=true;
             //Cambia el valor de paciente en estudio.
             //Avisa al estadistico
-            pthread_cond_t condicion;
             pthread_cond_signal(&condicion);
             //Guardamos el log en que está preparado para el estudio
             writeLogMessage("Paciente","El paciente está preparado para el estudio.");
@@ -344,13 +347,15 @@ void accionesMedico(pthread_t medico){
     //buscamos al paciente CON REACCIÓN que más tiempo lleve esperando
     for(int i = 0; i < numPacientes; i++){
         //si hay con reaccion
+        //esperar señal de accionesPaciente
+        //una vez recibida enviarle otra de nuevo
         if(pacientes[i].atendido == 4){
             sleep(5);
-            pacientes[i].id = 0;
+            /*pacientes[i].id = 0;
             pacientes[i].serologia = 0;
             pacientes[i].tipo = 0;
             pacientes[i].atendido = 0;
-            break;
+            break;*/
         }
             //si no, escogemos al que mas lleve esperando
         else{//calculamos la cola con mas solicitudes
@@ -365,6 +370,7 @@ void accionesMedico(pthread_t medico){
                     senior++;
                 }
             }
+            //COMPROBAR QUE EL ID NO SEA 0
             for(int k = 0; k < numPacientes; k++){//atendemos a aquel de la cola con mas solicitudes y que mas tiempo lleve esperando
                 if(pacientes[k].tipo == 'J' && junior >= medio && junior >=senior) {
                     accionesMedico2(pacientes[k]);
@@ -412,7 +418,7 @@ void accionesMedico2(struct Paciente auxPaciente){
             auxPaciente.atendido = 4;
         }
         if(vaAlEstudio <= 25) {//comprueba si participa en el estudio
-            auxPaciente.serologia = 1;
+            auxPaciente.serologia = true;
             //pasarle señal al estadistico
         }
 
@@ -428,7 +434,7 @@ void accionesMedico2(struct Paciente auxPaciente){
             auxPaciente.atendido = 4;
         }
         if(vaAlEstudio <= 25) {//comprueba si participa en el estudio
-            auxPaciente.serologia = 1;
+            auxPaciente.serologia = true;
             //pasarle señal al estadistico
         }
 
