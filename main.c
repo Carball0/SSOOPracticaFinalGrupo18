@@ -40,7 +40,7 @@ void nuevoPaciente(int signal);
 void *accionesPaciente(void *arg);
 void accionesEnfermero(char tipo, int id);
 void accionesEstadistico(pthread_t estadistico);
-void accionesMedico(pthread_t medico);
+void *accionesMedico(void *arg);
 void accionesMedico2(struct Paciente auxPaciente);
 void *HiloPaciente(void *arg);
 
@@ -180,7 +180,6 @@ void *HiloEnfermero(void *arg) {
     while(1) {
         accionesEnfermero(tipo, id);
     }
-
 }
 
 //AÑADIR SINCRONIZACION
@@ -341,11 +340,11 @@ void *accionesPaciente(void *arg){
     //Fin del hilo Paciente.
 }
 
-void accionesMedico(pthread_t medico){
+void *accionesMedico(void *arg){
     int junior = 0,  medio = 0,  senior = 0; //num pacientes Junior, Medio y Senior
-    pthread_mutex_lock(&mutex_hilos);
     //buscamos al paciente CON REACCIÓN que más tiempo lleve esperando
     for(int i = 0; i < numPacientes; i++){
+        pthread_mutex_lock(&mutex_hilos);
         //si hay con reaccion
         //esperar señal de accionesPaciente
         //una vez recibida enviarle otra de nuevo
@@ -354,8 +353,9 @@ void accionesMedico(pthread_t medico){
             /*pacientes[i].id = 0;
             pacientes[i].serologia = 0;
             pacientes[i].tipo = 0;
-            pacientes[i].atendido = 0;
-            break;*/
+            pacientes[i].atendido = 0;*/
+            //pthread_cond_wait(&condicion, &mutex_hilos);
+            //pthread_cond_signal(&condicion);
         }
             //si no, escogemos al que mas lleve esperando
         else{//calculamos la cola con mas solicitudes
@@ -372,15 +372,15 @@ void accionesMedico(pthread_t medico){
             }
             //COMPROBAR QUE EL ID NO SEA 0
             for(int k = 0; k < numPacientes; k++){//atendemos a aquel de la cola con mas solicitudes y que mas tiempo lleve esperando
-                if(pacientes[k].tipo == 'J' && junior >= medio && junior >=senior) {
+                if(pacientes[k].id != 0 && pacientes[k].tipo == 'J' && junior >= medio && junior >=senior) {
                     accionesMedico2(pacientes[k]);
                     break;
                 }
-                else if(pacientes[k].tipo == 'M' && medio >= junior && medio >=senior){
+                else if(pacientes[k].id != 0 && pacientes[k].tipo == 'M' && medio >= junior && medio >=senior){
                     accionesMedico2(pacientes[k]);
                     break;
                 }
-                else if(pacientes[k].tipo == 'S' && senior >= junior && senior >= medio){
+                else if(pacientes[k].id != 0 && pacientes[k].tipo == 'S' && senior >= junior && senior >= medio){
                     accionesMedico2(pacientes[k]);
                     break;
                 }
@@ -393,8 +393,8 @@ void accionesMedico(pthread_t medico){
                 i = 0;
             }
         }
+        pthread_mutex_unlock(&mutex_hilos);
     }
-    pthread_mutex_unlock(&mutex_hilos);
 }
 
 void accionesMedico2(struct Paciente auxPaciente){
@@ -402,7 +402,7 @@ void accionesMedico2(struct Paciente auxPaciente){
     int tiempoEspera = 0; //tiempo que espera el paciente
     int tieneReaccion = rand()% 100+1; //si este valor es <=10 tiene reaccion
     int vaAlEstudio= rand()% 100+1; //si este valor es <= 25 va al estudio serologico
-    //auxPaciente.atendido = 1; como poner si esta atendido?
+    auxPaciente.atendido = 1;
 
     tipoAtencion = rand()% 100+1;//calculamos el tipo de atencion
 
@@ -419,7 +419,8 @@ void accionesMedico2(struct Paciente auxPaciente){
         }
         if(vaAlEstudio <= 25) {//comprueba si participa en el estudio
             auxPaciente.serologia = true;
-            //pasarle señal al estadistico
+            //pasa señal al estadistico
+            pthread_cond_signal(&condicion);
         }
 
         //motivo finalización atención
@@ -435,7 +436,8 @@ void accionesMedico2(struct Paciente auxPaciente){
         }
         if(vaAlEstudio <= 25) {//comprueba si participa en el estudio
             auxPaciente.serologia = true;
-            //pasarle señal al estadistico
+            //pasa señal al estadistico
+            pthread_cond_signal(&condicion);
         }
 
         //motivo finalización atencion
@@ -448,10 +450,7 @@ void accionesMedico2(struct Paciente auxPaciente){
         //no se vacunan
         //no participan en el estudio
         //abandona consultorio
-        /*auxPaciente.atendido = 0;
-        auxPaciente.tipo = 0;
-        auxPaciente.serologia = 0;
-        auxPaciente.id = 0;*/
+        auxPaciente.id = 0;
         //motivo finalización atención
         writeLogMessage("Paciente","El paciente tenía catarro o gripe.");
     }
