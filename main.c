@@ -27,11 +27,8 @@ struct Enfermero {
 struct Paciente pacientes[MAXPACIENTES];
 struct Enfermero enfermeros[ENFERMEROS];
 int numPacientes, contEnfermero;
-pthread_t medico, estadistico;
-pthread_t enfermero;
-pthread_t hilo_paciente;
-pthread_mutex_t mutexAccionesPaciente;
-pthread_mutex_t mutex_hilos;
+pthread_t medico, estadistico, enfermero, hilo_paciente;
+pthread_mutex_t mutex_paciente;
 pthread_mutex_t mutex_enf;
 FILE* logFile;
 pthread_cond_t condicion;
@@ -51,8 +48,13 @@ void *accionesMedico(void *arg);
 void accionesMedico2(struct Paciente auxPaciente);
 void *HiloPaciente(void *arg);
 
+#pragma ide diagnostic ignored "EndlessLoop"
 int main(int argc, char** argv) {
-    //TODO Inicializar semaforos/mutex/var condicion no implementadas todavía
+    signal(SIGUSR1, mainHandler);   //Junior
+    signal(SIGUSR2, mainHandler);   //Medio
+    signal(SIGPIPE, mainHandler);   //Senior
+    signal(SIGINT, mainHandler);    //Terminar programa
+
     for(int i=0; i<MAXPACIENTES; i++) {
         pacientes[i].id = 0;
         pacientes[i].atendido = 0;
@@ -68,11 +70,9 @@ int main(int argc, char** argv) {
         pthread_create(&enfermero, NULL, HiloEnfermero, &i);
     }
 
+    // Inicialización del mutex - TODO Gestión de errores de mutex/thread
     pthread_mutex_init(&mutex_enf, NULL);
-
-    //inicializacion del mutex
-    //para usarlo: pthread_mutex_lock(&mutex_hilos) y lo mismo con unlock
-    pthread_mutex_init(&mutex_hilos,NULL);
+    pthread_mutex_init(&mutex_paciente, NULL);
 
     /*VARIABLE CONDICION(REVISAR Y CAMBIAR NOMBRE)
     *basicamente es una variable inicializada a 0 que segun quien la use aumenta su valor,
@@ -82,14 +82,10 @@ int main(int argc, char** argv) {
     pthread_create(&medico,NULL,accionesMedico,NULL);
     pthread_create(&estadistico,NULL,accionesEstadistico,NULL);
     //bucle que espera señales infinitamente
-    while(1){
-        signal(SIGUSR1, mainHandler);   //Junior
-        signal(SIGUSR2, mainHandler);   //Medio
-        signal(SIGPIPE, mainHandler);   //Senior
-        signal(SIGINT, mainHandler);    //Terminar programa
+
+    while(1) {
+        wait(0);
     }
-
-
 }
 
 void writeLogMessage(char *id, char *msg) {
@@ -129,13 +125,12 @@ void mainHandler(int signal) {
 void nuevoPaciente(int signal_handler)
 {
     struct Paciente p;
-    for(int i = 1;i<=MAXPACIENTES;i++){
+    for(int i = 0;i<MAXPACIENTES;i++){
         if(pacientes[i].id == 0){
             //si hay espacio, creamos un nuevo paciente y lo añadimos al array de pacientes
-            pacientes[i].id = i;
+            pacientes[i].id = i+1;
             pacientes[i].atendido = 0;
             //13 = SIGPIPE; 16 = SIGUSR1; 17 = SIGUSR2
-            //TODO comprobar que funciona el switch, sino poner casos para todos los numeros posibles
             switch(signal_handler){
                 case SIGPIPE:
                     //paciente senior
@@ -149,11 +144,13 @@ void nuevoPaciente(int signal_handler)
                     //paciente medio
                     pacientes[i].tipo = 'M';
                     break;
+                default:
+                    break;
             }
             pacientes[i].serologia = false;
             p.serologia = false;
             p.atendido = 0;
-            p.id = i;
+            p.id = i+1;
             p.tipo = pacientes[i].tipo;
             pthread_create(&hilo_paciente,NULL,accionesPaciente,(void *)&p);
             break;
@@ -168,13 +165,12 @@ void *HiloEnfermero(void *arg) {
         int i = *(int*)arg;
         int id = enfermeros[i].id;
         char tipo = enfermeros[i].tipo;
-        pthread_mutex_unlock(&mutex_enf);//Unlock enfermero
-
         char str[] = "Enfermer@ ";
-        char idChar = 'id';
+        char idChar = 'id+1';
         strncat(str, &idChar, 1);
-        writeLogMessage(str, "Ateniendo a paciente");
+        writeLogMessage(str, "Ateniendo a paciente...");
         accionesEnfermero(tipo, id);
+        pthread_mutex_unlock(&mutex_enf);//Unlock enfermero
     }
 }
 
@@ -184,7 +180,7 @@ void accionesEnfermero(char tipo, int id) {
     bool vacio = true; //True si no hay pacientes
 
     char str[] = "Enfermer@ ";
-    char idChar = 'id';
+    char idChar = 'id+1';
     strncat(str, &idChar, 1);
 
     if(tipo=='J' || tipo=='M' || tipo=='S') {   // Tipo valido
@@ -247,7 +243,7 @@ void *accionesEstadistico(void *arg)
 //espera que le avisen de que hay un paciente en estudio (EXCLUSION MUTUA)
     pthread_join(&hilo_paciente,NULL);
 //escribe en el log el comienzo de actividad (EXCLUSION MUTUA)
-    pthread_mutex_lock(&mutex_hilos);
+    //pthread_mutex_lock(&mutex_hilos);
     writeLogMessage("Estadistico","Comienzo de actividad del estadistico.");
 //calcula el tiempo de actividad
     sleep(4);
@@ -256,12 +252,12 @@ void *accionesEstadistico(void *arg)
 //escribe en el log que finaliza la actividad (EXCLUSION MUTUA)
     writeLogMessage("Estadistico","Fin de actividad del estadistico.");
 //cambia paciente en estudio y vuelve a 1 (EXCLUSION MUTUA)
-    pthread_mutex_unlock(&mutex_hilos);
+    //pthread_mutex_unlock(&mutex_hilos);
 }
 
 void *accionesPaciente(void *arg){
+    pthread_mutex_lock(&mutex_paciente);
     struct Paciente *p;
-    pthread_mutex_lock(&mutexAccionesPaciente);
     p=(struct Paciente *)arg;
     //Guardar en el log la hora de entrada.
     writeLogMessage("Paciente","Hora de entrada del paciente.");
@@ -269,7 +265,8 @@ void *accionesPaciente(void *arg){
     char mensajeTipoPaciente[50];
     char tipoPaciente[]="Tipo de solicitud del paciente : ";
     strcpy(mensajeTipoPaciente,tipoPaciente);
-    strcat(mensajeTipoPaciente,p->tipo);
+    char tipoP = 'p->tipo';
+    strcat(mensajeTipoPaciente,tipoP);
     writeLogMessage("Paciente",mensajeTipoPaciente);
     //Duerme 3 segundos
     sleep(3);
@@ -304,22 +301,22 @@ void *accionesPaciente(void *arg){
                 //Codigo de los pacientes que ni se van ni pierden turno.
                 //El paciente debe dormir 3 segundos y vuelve a 4.
                 sleep(3);
-                p->atendido=4;
+                p->atendido=4;  //TODO Vuelve a paso 4
             }
         }
     }else{
         //Si está siendo atendido por el enfermer@ debemos esperar a que termine.
-        pthread_cond_wait(&condicionAccionesPyEnfermero,&mutexAccionesPaciente);
+        pthread_cond_wait(&condicionAccionesPyEnfermero,&mutex_paciente);
     }
     //Si no se va por gripe o catarro calcula si le da reacción
     //TIENE QUE ESPERAR INFORMACION DEL MEDICO Y/O ENFERMEROS
-    pthread_cond_wait(&condicionInfoMedicoyEnfermero,&mutexAccionesPaciente);
+    pthread_cond_wait(&condicionInfoMedicoyEnfermero,&mutex_paciente);
     int reaccionPaciente=rand()% 100+1;
     if(reaccionPaciente<=10){
         //Si le da cambia el valor de atendido a 4
         p->atendido=4;
         //Esperamos a que termine la atención
-        pthread_cond_wait(&condicionAccionesPyMedico,&mutexAccionesPaciente);
+        pthread_cond_wait(&condicionAccionesPyMedico,&mutex_paciente);
     }else{
         //Si no le da reacción calculamos si decide o no participar en el estudio serológico
         int participaEstudio=rand()% 100+1;
@@ -333,7 +330,7 @@ void *accionesPaciente(void *arg){
             //Guardamos el log en que está preparado para el estudio
             writeLogMessage("Paciente","El paciente está preparado para el estudio.");
             //Se queda esperando a que digan que pueden marchar
-            pthread_cond_wait(&condicionAccionesPyEstadistico,&mutexAccionesPaciente);
+            pthread_cond_wait(&condicionAccionesPyEstadistico,&mutex_paciente);
             //Guardamos el log en que deja el estudio
             writeLogMessage("Paciente","El paciente ha terminado el estudio.");
         }
@@ -342,8 +339,8 @@ void *accionesPaciente(void *arg){
     p->id=0;
     //Escribe en el log
     writeLogMessage("Paciente","El paciente ha terminado de vacunarse y se ha ido.");
+    pthread_mutex_unlock(&mutex_paciente);
     pthread_exit(NULL);
-    pthread_mutex_unlock(&mutexAccionesPaciente);
     //Fin del hilo Paciente.
 }
 
@@ -351,7 +348,7 @@ void *accionesMedico(void *arg){
     int junior = 0,  medio = 0,  senior = 0; //num pacientes Junior, Medio y Senior
     //buscamos al paciente CON REACCIÓN que más tiempo lleve esperando
     for(int i = 0; i < numPacientes; i++){
-        pthread_mutex_lock(&mutex_hilos);
+        pthread_mutex_lock(&mutex_paciente);
         //si hay con reaccion
         //esperar señal de accionesPaciente
         //una vez recibida enviarle otra de nuevo
@@ -400,7 +397,7 @@ void *accionesMedico(void *arg){
                 i = 0;
             }
         }
-        pthread_mutex_unlock(&mutex_hilos);
+        pthread_mutex_unlock(&mutex_paciente);
     }
 }
 
