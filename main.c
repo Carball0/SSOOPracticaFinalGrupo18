@@ -29,6 +29,7 @@ struct Enfermero enfermeros[ENFERMEROS];
 int numPacientes, contEnfermero;
 pthread_t medico, estadistico;
 pthread_t enfermero;
+pthread_t hilo_paciente;
 pthread_mutex_t mutex_hilos;
 pthread_mutex_t enfMutex[ENFERMEROS];
 FILE* logFile;
@@ -39,7 +40,7 @@ void mainHandler(int signal);
 void nuevoPaciente(int signal);
 void *accionesPaciente(void *arg);
 void accionesEnfermero(char tipo, int id);
-void accionesEstadistico(pthread_t estadistico);
+void *accionesEstadistico(void *arg);
 void *accionesMedico(void *arg);
 void accionesMedico2(struct Paciente auxPaciente);
 void *HiloPaciente(void *arg);
@@ -73,7 +74,7 @@ int main(int argc, char** argv) {
     */
 
     pthread_create(&medico,NULL,accionesMedico,NULL);
-
+    pthread_create(&estadistico,NULL,accionesEstadistico,NULL);
     //bucle que espera señales infinitamente
     while(1){
         signal(SIGUSR1, mainHandler);   //Junior
@@ -134,7 +135,7 @@ void mainHandler(int signal) {
 }
 
 //metodo que comprueba si hay sitio para la llegada de un nuevo paciente, y en ese caso lo crea
-void nuevoPaciente(int signal)
+void nuevoPaciente(int signal_handler)
 {
     struct Paciente p;
     for(int i = 1;i<=MAXPACIENTES;i++){
@@ -144,7 +145,7 @@ void nuevoPaciente(int signal)
             pacientes[i].atendido = 0;
             //13 = SIGPIPE; 16 = SIGUSR1; 17 = SIGUSR2
             //TODO comprobar que funciona el switch, sino poner casos para todos los numeros posibles
-            switch(signal){
+            switch(signal_handler){
                 case SIGPIPE:
                     //paciente senior
                     pacientes[i].tipo = 'S';
@@ -163,7 +164,6 @@ void nuevoPaciente(int signal)
             p.atendido = 0;
             p.id = i;
             p.tipo = pacientes[i].tipo;
-            pthread_t hilo_paciente;
             pthread_create(&hilo_paciente,NULL,accionesPaciente,(void *)&p);
             break;
         }
@@ -182,17 +182,18 @@ void *HiloEnfermero(void *arg) {
     }
 }
 
-//AÑADIR SINCRONIZACION
-void accionesEstadistico(pthread_t estadistico)
+void *accionesEstadistico(void *arg)
 {
-    pthread_wait();
+
 //espera que le avisen de que hay un paciente en estudio (EXCLUSION MUTUA)
+    pthread_join(&hilo_paciente,NULL);
 //escribe en el log el comienzo de actividad (EXCLUSION MUTUA)
     pthread_mutex_lock(&mutex_hilos);
     writeLogMessage("Estadistico","Comienzo de actividad del estadistico.");
 //calcula el tiempo de actividad
     sleep(4);
 //termina la actividad y avisa al paciente (VARIABLES CONDICION)
+    pthread_cond_signal(&condicion);
 //escribe en el log que finaliza la actividad (EXCLUSION MUTUA)
     writeLogMessage("Estadistico","Fin de actividad del estadistico.");
 //cambia paciente en estudio y vuelve a 1 (EXCLUSION MUTUA)
