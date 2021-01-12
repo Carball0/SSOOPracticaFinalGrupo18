@@ -32,7 +32,7 @@ pthread_t enfermero;
 pthread_t hilo_paciente;
 pthread_mutex_t mutexAccionesPaciente;
 pthread_mutex_t mutex_hilos;
-pthread_mutex_t enfMutex[ENFERMEROS];
+pthread_mutex_t mutex_enf;
 FILE* logFile;
 pthread_cond_t condicion;
 pthread_cond_t condicionAccionesPyEnfermero;
@@ -44,17 +44,14 @@ void writeLogMessage(char *id, char *msg);
 void mainHandler(int signal);
 void nuevoPaciente(int signal);
 void *accionesPaciente(void *arg);
+void *HiloEnfermero(void *arg);
 void accionesEnfermero(char tipo, int id);
 void *accionesEstadistico(void *arg);
 void *accionesMedico(void *arg);
 void accionesMedico2(struct Paciente auxPaciente);
 void *HiloPaciente(void *arg);
 
-void *HiloEnfermero(void *arg);
-
 int main(int argc, char** argv) {
-    logFile = fopen("logfile.txt", "w+"); //Abre log para escribir en modo escritura
-
     //TODO Inicializar semaforos/mutex/var condicion no implementadas todavía
     for(int i=0; i<MAXPACIENTES; i++) {
         pacientes[i].id = 0;
@@ -65,9 +62,13 @@ int main(int argc, char** argv) {
 
     for(int i=0; i<ENFERMEROS; i++) {
         enfermeros[i].id = i+1;
-        pthread_mutex_init(&enfMutex[i], NULL);
-        pthread_create(&enfermero, NULL, HiloEnfermero, (void *)&enfermeros[i]);
+        if(i == 0) enfermeros[i].tipo = 'J';
+        if(i == 1) enfermeros[i].tipo = 'M';
+        if(i == 2) enfermeros[i].tipo = 'S';
+        pthread_create(&enfermero, NULL, HiloEnfermero, &i);
     }
+
+    pthread_mutex_init(&mutex_enf, NULL);
 
     //inicializacion del mutex
     //para usarlo: pthread_mutex_lock(&mutex_hilos) y lo mismo con unlock
@@ -86,21 +87,6 @@ int main(int argc, char** argv) {
         signal(SIGUSR2, mainHandler);   //Medio
         signal(SIGPIPE, mainHandler);   //Senior
         signal(SIGINT, mainHandler);    //Terminar programa
-
-        /* TODO Creación de threads pacientes, enfermeros y medico
-         * Revisar como asociar struct al thread en pacientes y enfermero
-         * Se puede hacer añadiendo el thread a las variables del struct:
-         * struct Paciente {                struct Enfermero {
-         *      ...                              ...
-         *      pthread_t paciente;              pthread_t enfermero;
-         *      ...                              ...
-         *  }                                }
-         * El thread se inicializaría de la siguiente manera: en los pacientes
-         * se inicializa en el handler cuando se reciba un signal, y los enfermeros
-         * se inicializan en el for de arriba, modificando el thread asociado a
-         * cada paciente/enfermero.
-         */
-
     }
 
 
@@ -113,7 +99,7 @@ void writeLogMessage(char *id, char *msg) {
     char stnow[25];
     strftime(stnow, 25, "%d/%m/%y %H:%M:%S", tlocal);
 // Escribimos en el log
-    logFile = fopen("logFileName", "a");    //TODO
+    logFile = fopen("logFileName", "a");
     fprintf(logFile, "[%s] %s: %s\n", stnow, id, msg);
     fclose(logFile);
 }
@@ -175,46 +161,38 @@ void nuevoPaciente(int signal_handler)
     }
 }
 
+#pragma ide diagnostic ignored "EndlessLoop"
 void *HiloEnfermero(void *arg) {
-    pthread_mutex_lock(&enfMutex[enfermero->id]);
-    struct Enfermero *enfermero = arg;
-    writeLogMessage("Enfermer@", "El hilo acaba de comenzar");
-    int id = enfermero->id;
-    char tipo = enfermero->tipo;
-    pthread_mutex_unlock(&enfMutex[id]);
-    while(1) {
+    while(true) {
+        pthread_mutex_lock(&mutex_enf); //Lock enfermero
+        int i = *(int*)arg;
+        int id = enfermeros[i].id;
+        char tipo = enfermeros[i].tipo;
+        pthread_mutex_unlock(&mutex_enf);//Unlock enfermero
+
+        char str[] = "Enfermer@ ";
+        char idChar = 'id';
+        strncat(str, &idChar, 1);
+        writeLogMessage(str, "Ateniendo a paciente");
         accionesEnfermero(tipo, id);
     }
 }
 
-void *accionesEstadistico(void *arg)
-{
-
-//espera que le avisen de que hay un paciente en estudio (EXCLUSION MUTUA)
-    pthread_join(&hilo_paciente,NULL);
-//escribe en el log el comienzo de actividad (EXCLUSION MUTUA)
-    pthread_mutex_lock(&mutex_hilos);
-    writeLogMessage("Estadistico","Comienzo de actividad del estadistico.");
-//calcula el tiempo de actividad
-    sleep(4);
-//termina la actividad y avisa al paciente (VARIABLES CONDICION)
-    pthread_cond_signal(&condicion);
-//escribe en el log que finaliza la actividad (EXCLUSION MUTUA)
-    writeLogMessage("Estadistico","Fin de actividad del estadistico.");
-//cambia paciente en estudio y vuelve a 1 (EXCLUSION MUTUA)
-    pthread_mutex_unlock(&mutex_hilos);
-}
-
-void accionesEnfermero(char tipo, int id) { //TODO Semaforos/Mutex/etc
+void accionesEnfermero(char tipo, int id) {
     srand(time(NULL));
-    struct Paciente pacVacio;
     bool otroTipo = true;  //True si no se ha atendido a un apciente de su tipo y va a otro rango de edad
     bool vacio = true; //True si no hay pacientes
+
+    char str[] = "Enfermer@ ";
+    char idChar = 'id';
+    strncat(str, &idChar, 1);
+
     if(tipo=='J' || tipo=='M' || tipo=='S') {   // Tipo valido
+        //TODO MUTEX DE PACIENTES LOCK
         for(int i = 0; i<MAXPACIENTES; i++) {
             if(pacientes[i].tipo == tipo && !pacientes[i].atendido) {
                 otroTipo = false; vacio = false;
-                pacientes[i].atendido = true;   //TODO Revisar atendido en var global (Grupo)
+                pacientes[i].atendido = true;
                 int random = (rand()%100)+1;    //Random entre 0 y 100
                 writeLogMessage("Enfermer@", "Comienza la atención del paciente");
                 if(random<=80) {    //To_do en regla
@@ -245,7 +223,7 @@ void accionesEnfermero(char tipo, int id) { //TODO Semaforos/Mutex/etc
                 sleep(5);
             }
         }
-        if(vacio) { //TODO Revisar si esta accion se ha de realizar en thread y no en funcion
+        if(vacio) {
             sleep(1);
             accionesEnfermero(tipo, id);
             return;
@@ -261,6 +239,24 @@ void accionesEnfermero(char tipo, int id) { //TODO Semaforos/Mutex/etc
         perror("Emfermero sin tipo valido");
         return;
     }
+}
+
+void *accionesEstadistico(void *arg)
+{
+
+//espera que le avisen de que hay un paciente en estudio (EXCLUSION MUTUA)
+    pthread_join(&hilo_paciente,NULL);
+//escribe en el log el comienzo de actividad (EXCLUSION MUTUA)
+    pthread_mutex_lock(&mutex_hilos);
+    writeLogMessage("Estadistico","Comienzo de actividad del estadistico.");
+//calcula el tiempo de actividad
+    sleep(4);
+//termina la actividad y avisa al paciente (VARIABLES CONDICION)
+    pthread_cond_signal(&condicion);
+//escribe en el log que finaliza la actividad (EXCLUSION MUTUA)
+    writeLogMessage("Estadistico","Fin de actividad del estadistico.");
+//cambia paciente en estudio y vuelve a 1 (EXCLUSION MUTUA)
+    pthread_mutex_unlock(&mutex_hilos);
 }
 
 void *accionesPaciente(void *arg){
