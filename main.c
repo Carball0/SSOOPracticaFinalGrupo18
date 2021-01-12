@@ -30,10 +30,15 @@ int numPacientes, contEnfermero;
 pthread_t medico, estadistico;
 pthread_t enfermero;
 pthread_t hilo_paciente;
+pthread_mutex_t mutexAccionesPaciente;
 pthread_mutex_t mutex_hilos;
 pthread_mutex_t enfMutex[ENFERMEROS];
 FILE* logFile;
 pthread_cond_t condicion;
+pthread_cond_t condicionAccionesPyEnfermero;
+pthread_cond_t condicionInfoMedicoyEnfermero;
+pthread_cond_t condicionAccionesPyMedico;
+pthread_cond_t condicionAccionesPyEstadistico;
 
 void writeLogMessage(char *id, char *msg);
 void mainHandler(int signal);
@@ -260,6 +265,7 @@ void accionesEnfermero(char tipo, int id) { //TODO Semaforos/Mutex/etc
 
 void *accionesPaciente(void *arg){
     struct Paciente *p;
+    pthread_mutex_lock(&mutexAccionesPaciente);
     p=(struct Paciente *)arg;
     //Guardar en el log la hora de entrada.
     writeLogMessage("Paciente","Hora de entrada del paciente.");
@@ -281,13 +287,13 @@ void *accionesPaciente(void *arg){
             //Log que avisa de que se va por cansancio
             writeLogMessage("Paciente","El paciente se ha ido porque se ha cansado de esperar.");
             //codigo de cuando se va
-            //TODO PONER ID A 0
+            p->id=0;
             pthread_exit(NULL);
         }else if(comportamientoPaciente>20&&comportamientoPaciente<=30){
             //Log que avisa de que se va porque se lo ha pensado mejor
             writeLogMessage("Paciente","El paciente se lo ha pensado mejor y se ha ido.");
             //codigo de cuando se lo piensa mejor y se va tambien.
-            //PONER DATOS A 0
+            p->id=0;
             pthread_exit(NULL);
         }else{
             //70% restante
@@ -296,6 +302,7 @@ void *accionesPaciente(void *arg){
                 //Log que avisa de que ha perdido el turno por ir al baño
                 writeLogMessage("Paciente","El paciente ha ido al baño y ha perdido el turno.");
                 //Codigo de cuando se va al baño y pierde el turno.
+                p->id=0;
                 pthread_exit(NULL);
             }else{
                 //Codigo de los pacientes que ni se van ni pierden turno.
@@ -306,16 +313,17 @@ void *accionesPaciente(void *arg){
         }
     }else{
         //Si está siendo atendido por el enfermer@ debemos esperar a que termine.
-
+        pthread_cond_wait(&condicionAccionesPyEnfermero,&mutexAccionesPaciente);
     }
     //Si no se va por gripe o catarro calcula si le da reacción
     //TIENE QUE ESPERAR INFORMACION DEL MEDICO Y/O ENFERMEROS
+    pthread_cond_wait(&condicionInfoMedicoyEnfermero,&mutexAccionesPaciente);
     int reaccionPaciente=rand()% 100+1;
     if(reaccionPaciente<=10){
         //Si le da cambia el valor de atendido a 4
         p->atendido=4;
         //Esperamos a que termine la atención
-
+        pthread_cond_wait(&condicionAccionesPyMedico,&mutexAccionesPaciente);
     }else{
         //Si no le da reacción calculamos si decide o no participar en el estudio serológico
         int participaEstudio=rand()% 100+1;
@@ -325,11 +333,11 @@ void *accionesPaciente(void *arg){
             p->serologia=true;
             //Cambia el valor de paciente en estudio.
             //Avisa al estadistico
-            pthread_cond_signal(&condicion);
+            pthread_cond_signal(&condicionAccionesPyEstadistico);
             //Guardamos el log en que está preparado para el estudio
             writeLogMessage("Paciente","El paciente está preparado para el estudio.");
             //Se queda esperando a que digan que pueden marchar
-
+            pthread_cond_wait(&condicionAccionesPyEstadistico,&mutexAccionesPaciente);
             //Guardamos el log en que deja el estudio
             writeLogMessage("Paciente","El paciente ha terminado el estudio.");
         }
@@ -338,6 +346,8 @@ void *accionesPaciente(void *arg){
     p->id=0;
     //Escribe en el log
     writeLogMessage("Paciente","El paciente ha terminado de vacunarse y se ha ido.");
+    pthread_exit(NULL);
+    pthread_mutex_unlock(&mutexAccionesPaciente);
     //Fin del hilo Paciente.
 }
 
