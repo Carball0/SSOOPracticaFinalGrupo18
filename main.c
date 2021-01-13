@@ -30,6 +30,7 @@ int numPacientes, contEnfermero;
 pthread_t medico, estadistico, enfermero, hilo_paciente;
 pthread_mutex_t mutex_paciente;
 pthread_mutex_t mutex_enf;
+pthread_mutex_t mutex_estadistico;
 FILE* logFile;
 pthread_cond_t condicion;
 pthread_cond_t condicionAccionesPyEnfermero;
@@ -73,7 +74,7 @@ int main(int argc, char** argv) {
     // Inicialización del mutex - TODO Gestión de errores de mutex/thread
     pthread_mutex_init(&mutex_enf, NULL);
     pthread_mutex_init(&mutex_paciente, NULL);
-
+    pthread_mutex_init(&mutex_estadistico, NULL);
     /*VARIABLE CONDICION(REVISAR Y CAMBIAR NOMBRE)
     *basicamente es una variable inicializada a 0 que segun quien la use aumenta su valor,
     * lo disminuye, o espera a que tenga un valor
@@ -148,11 +149,7 @@ void nuevoPaciente(int signal_handler)
                     break;
             }
             pacientes[i].serologia = false;
-            p.serologia = false;
-            p.atendido = 0;
-            p.id = i+1;
-            p.tipo = pacientes[i].tipo;
-            pthread_create(&hilo_paciente,NULL,accionesPaciente,(void *)&p);
+            pthread_create(&hilo_paciente,NULL,accionesPaciente,&i);
             break;
         }
     }
@@ -241,21 +238,22 @@ void *accionesEstadistico(void *arg)
 {
 
 //espera que le avisen de que hay un paciente en estudio (EXCLUSION MUTUA)
-    pthread_join(&hilo_paciente,NULL);
+    pthread_cond_wait(&condicionAccionesPyEstadistico, &mutex_estadistico);
 //escribe en el log el comienzo de actividad (EXCLUSION MUTUA)
-    //pthread_mutex_lock(&mutex_hilos);
+    pthread_mutex_lock(&mutex_estadistico);
     writeLogMessage("Estadistico","Comienzo de actividad del estadistico.");
 //calcula el tiempo de actividad
     sleep(4);
 //termina la actividad y avisa al paciente (VARIABLES CONDICION)
-    pthread_cond_signal(&condicion);
+    pthread_cond_signal(&condicionAccionesPyEstadistico);
 //escribe en el log que finaliza la actividad (EXCLUSION MUTUA)
     writeLogMessage("Estadistico","Fin de actividad del estadistico.");
 //cambia paciente en estudio y vuelve a 1 (EXCLUSION MUTUA)
-    //pthread_mutex_unlock(&mutex_hilos);
+    pthread_mutex_unlock(&mutex_estadistico);
 }
 
 void *accionesPaciente(void *arg){
+    //TODO por parametro se recibe la posicion en el array del paciente, y de ahi se sacan los datos
     pthread_mutex_lock(&mutex_paciente);
     struct Paciente *p;
     p=(struct Paciente *)arg;
