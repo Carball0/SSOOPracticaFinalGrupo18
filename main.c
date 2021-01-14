@@ -389,15 +389,14 @@ void *accionesMedico(void *arg){
         pthread_mutex_lock(&mutex_paciente);
         //si hay con reaccion
         //esperar señal de accionesPaciente
-        //una vez recibida enviarle otra de nuevo
+        //pthread_cond_wait(&condicionAccionesPyMedico, &mutex_paciente);
         if(pacientes[i].atendido == 4){
             sleep(5);
             /*pacientes[i].id = 0;
             pacientes[i].serologia = 0;
             pacientes[i].tipo = 0;
             pacientes[i].atendido = 0;*/
-            //pthread_cond_wait(&condicion, &mutex_hilos);
-            //pthread_cond_signal(&condicion);
+            //pthread_cond_signal(&condicionInfoMedicoyEnfermero);
         }
             //si no, escogemos al que mas lleve esperando
         else{//calculamos la cola con mas solicitudes
@@ -462,7 +461,7 @@ void accionesMedico2(struct Paciente auxPaciente){
         if(vaAlEstudio <= 25) {//comprueba si participa en el estudio
             auxPaciente.serologia = true;
             //pasa señal al estadistico
-            pthread_cond_signal(&condicion);
+            pthread_cond_signal(&condicionAccionesPyEstadistico);
         }
 
         //motivo finalización atención
@@ -479,7 +478,7 @@ void accionesMedico2(struct Paciente auxPaciente){
         if(vaAlEstudio <= 25) {//comprueba si participa en el estudio
             auxPaciente.serologia = true;
             //pasa señal al estadistico
-            pthread_cond_signal(&condicion);
+            pthread_cond_signal(&condicionAccionesPyEstadistico);
         }
 
         //motivo finalización atencion
@@ -492,7 +491,8 @@ void accionesMedico2(struct Paciente auxPaciente){
         //no se vacunan
         //no participan en el estudio
         //abandona consultorio
-        auxPaciente.id = 0;
+        pthread_cond_signal(&condicionInfoMedicoyEnfermero);
+
         //motivo finalización atención
         writeLogMessage("Paciente","El paciente tenía catarro o gripe.");
     }
