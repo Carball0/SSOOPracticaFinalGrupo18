@@ -38,7 +38,22 @@ pthread_cond_t condicionInfoMedicoyEnfermero;
 pthread_cond_t condicionAccionesPyMedico;
 pthread_cond_t condicionAccionesPyEstadistico;
 
+struct Paciente pacientes[MAXPACIENTES];
+struct Enfermero enfermeros[ENFERMEROS];
+int numPacientes, contEnfermero;
+bool fin;
+pthread_t medico, estadistico, enfermero, hilo_paciente;
+pthread_mutex_t mutex_paciente;
+pthread_mutex_t mutex_enf;
+FILE* logFile;
+pthread_cond_t condicion;
+pthread_cond_t condicionAccionesPyEnfermero;
+pthread_cond_t condicionInfoMedicoyEnfermero;
+pthread_cond_t condicionAccionesPyMedico;
+pthread_cond_t condicionAccionesPyEstadistico;
+
 void writeLogMessage(char *id, char *msg);
+bool isColaVacia();
 void mainHandler(int signal);
 void nuevoPaciente(int signal);
 void *accionesPaciente(void *arg);
@@ -74,7 +89,7 @@ int main(int argc, char** argv) {
     // Inicialización del mutex - TODO Gestión de errores de mutex/thread
     pthread_mutex_init(&mutex_enf, NULL);
     pthread_mutex_init(&mutex_paciente, NULL);
-    pthread_mutex_init(&mutex_estadistico, NULL);
+
     /*VARIABLE CONDICION(REVISAR Y CAMBIAR NOMBRE)
     *basicamente es una variable inicializada a 0 que segun quien la use aumenta su valor,
     * lo disminuye, o espera a que tenga un valor
@@ -84,8 +99,14 @@ int main(int argc, char** argv) {
     pthread_create(&estadistico,NULL,accionesEstadistico,NULL);
     //bucle que espera señales infinitamente
 
-    while(1) {
+    fin = false;
+
+    while(1) {  //Esperamos por señales
         wait(0);
+        sleep(1);
+        if(fin) {   //Recibido SIGINT, acaba el programa
+            break;
+        }
     }
 }
 
@@ -118,6 +139,8 @@ void mainHandler(int signal) {
         case SIGINT:
             //Salir del programa
             exit(0);
+            break;
+        default:
             break;
     }
 }
@@ -158,17 +181,34 @@ void nuevoPaciente(int signal_handler)
 #pragma ide diagnostic ignored "EndlessLoop"
 void *HiloEnfermero(void *arg) {
     while(true) {
-        pthread_mutex_lock(&mutex_enf); //Lock enfermero
-        int i = *(int*)arg;
-        int id = enfermeros[i].id;
-        char tipo = enfermeros[i].tipo;
-        char str[] = "Enfermer@ ";
-        char idChar = 'id+1';
-        strncat(str, &idChar, 1);
-        writeLogMessage(str, "Ateniendo a paciente...");
-        accionesEnfermero(tipo, id);
-        pthread_mutex_unlock(&mutex_enf);//Unlock enfermero
+        if(isColaVacia()) {
+            sleep(2);
+        } else {
+            pthread_mutex_lock(&mutex_enf); //Lock enfermero
+            int i = *(int*)arg;     //Convertimosm argumento
+            int id = enfermeros[i].id;
+            char tipo = enfermeros[i].tipo;
+            char str[] = "Enfermer@ ";
+            char idChar = 'id+1';
+            strncat(str, &idChar, 1);
+            writeLogMessage(str, "Ateniendo a paciente...");
+            accionesEnfermero(tipo, id);
+            pthread_mutex_unlock(&mutex_enf);//Unlock enfermero
+            sleep(1);
+        }
     }
+}
+
+bool isColaVacia() {
+    bool vacio = true;
+    pthread_mutex_lock(&mutex_paciente);
+    for(int i = 0; i<MAXPACIENTES; i++) {
+        if(pacientes[i].id != 0) {
+            vacio = false;
+        }
+    }
+    pthread_mutex_lock(&mutex_paciente);
+    return vacio;
 }
 
 void accionesEnfermero(char tipo, int id) {
@@ -181,13 +221,13 @@ void accionesEnfermero(char tipo, int id) {
     strncat(str, &idChar, 1);
 
     if(tipo=='J' || tipo=='M' || tipo=='S') {   // Tipo valido
-        //TODO MUTEX DE PACIENTES LOCK
+        pthread_mutex_lock(&mutex_paciente); //Lock enfermero
         for(int i = 0; i<MAXPACIENTES; i++) {
             if(pacientes[i].tipo == tipo && !pacientes[i].atendido) {
                 otroTipo = false; vacio = false;
                 pacientes[i].atendido = true;
                 int random = (rand()%100)+1;    //Random entre 0 y 100
-                writeLogMessage("Enfermer@", "Comienza la atención del paciente");
+                writeLogMessage(str, "Comienza la atención del paciente");
                 if(random<=80) {    //To_do en regla
                     sleep((rand()%4)+1);
                     if(pacientes[i].serologia){
@@ -195,7 +235,8 @@ void accionesEnfermero(char tipo, int id) {
                         // TODO Abandona consultorio, revisar si se va aqui o en estudio
                         // pacientes[i].id = 0;
                     }
-                    writeLogMessage("Enfermer@", "Fin atención paciente exitosa");
+                    pthread_mutex_unlock(&mutex_paciente);
+                    writeLogMessage(str, "Fin atención paciente exitosa");
                 } else if(random>80 && random<= 90) {  //Mal identificados
                     sleep((rand()%5)+2);
                     if(pacientes[i].serologia){
@@ -203,16 +244,18 @@ void accionesEnfermero(char tipo, int id) {
                         // TODO Abandona consultorio, revisar si se va aqui o en estudio
                         // pacientes[i].id = 0;
                     }
-                    writeLogMessage("Enfermer@", "Fin atención paciente exitosa");
+                    pthread_mutex_unlock(&mutex_paciente);
+                    writeLogMessage(str, "Fin atención paciente exitosa");
                 } else if(random>90 && random<=100){   //Catarro o Gripe
                     sleep((rand()%5)+6);
-                    writeLogMessage("Enfermer@", "Fin atención paciente: Catarro o Gripe");
+                    writeLogMessage(str, "Fin atención paciente: Catarro o Gripe");
                     pacientes[i].id = 0;    //Borra paciente
                     //Abandonan consultorio sin reaccion ni estudio
+                    pthread_mutex_unlock(&mutex_paciente);
                 }
             }
             if(contEnfermero == 5) {    //Comprobamos descanso para cafe
-                writeLogMessage("Enfermer@", "Descanso para el cafe");
+                writeLogMessage(str, "Descanso para el cafe");
                 sleep(5);
             }
         }
