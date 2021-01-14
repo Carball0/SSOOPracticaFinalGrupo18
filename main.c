@@ -253,17 +253,15 @@ void *accionesEstadistico(void *arg)
 }
 
 void *accionesPaciente(void *arg){
-    //TODO por parametro se recibe la posicion en el array del paciente, y de ahi se sacan los datos
+    int i=*(int*)arg;
     pthread_mutex_lock(&mutex_paciente);
-    struct Paciente *p;
-    p=(struct Paciente *)arg;
     //Guardar en el log la hora de entrada.
     writeLogMessage("Paciente","Hora de entrada del paciente.");
     //Guardar en el log el tipo de solicitud.
     char mensajeTipoPaciente[50];
     char tipoPaciente[]="Tipo de solicitud del paciente : ";
     strcpy(mensajeTipoPaciente,tipoPaciente);
-    char tipoP = 'p->tipo';
+    char tipoP = 'pacientes[i].tipo';
     strcat(mensajeTipoPaciente,tipoP);
     writeLogMessage("Paciente",mensajeTipoPaciente);
     //Duerme 3 segundos
@@ -271,20 +269,20 @@ void *accionesPaciente(void *arg){
     //Comprueba si está siendo atendido.
     //Si no lo está, calculamos el comportamiento del paciente (si se va por cansarse
     //de esperar, si se lo piensa mejor) o si se va al baño y pierde su turno.
-    if(p->atendido==0){
+    while(pacientes[i].atendido!=0){
         int comportamientoPaciente=rand()% 100+1;
         //un 20 % de los pacientes se cansa de esperar y se va.
         if(comportamientoPaciente<=20){
             //Log que avisa de que se va por cansancio
             writeLogMessage("Paciente","El paciente se ha ido porque se ha cansado de esperar.");
             //codigo de cuando se va
-            p->id=0;
+            pacientes[i].id=0;
             pthread_exit(NULL);
         }else if(comportamientoPaciente>20&&comportamientoPaciente<=30){
             //Log que avisa de que se va porque se lo ha pensado mejor
             writeLogMessage("Paciente","El paciente se lo ha pensado mejor y se ha ido.");
             //codigo de cuando se lo piensa mejor y se va tambien.
-            p->id=0;
+            pacientes[i].id=0;
             pthread_exit(NULL);
         }else{
             //70% restante
@@ -293,26 +291,25 @@ void *accionesPaciente(void *arg){
                 //Log que avisa de que ha perdido el turno por ir al baño
                 writeLogMessage("Paciente","El paciente ha ido al baño y ha perdido el turno.");
                 //Codigo de cuando se va al baño y pierde el turno.
-                p->id=0;
+                pacientes[i].id=0;
                 pthread_exit(NULL);
             }else{
                 //Codigo de los pacientes que ni se van ni pierden turno.
                 //El paciente debe dormir 3 segundos y vuelve a 4.
                 sleep(3);
-                p->atendido=4;  //TODO Vuelve a paso 4
+                pacientes[i].atendido=4;
             }
         }
-    }else{
-        //Si está siendo atendido por el enfermer@ debemos esperar a que termine.
-        pthread_cond_wait(&condicionAccionesPyEnfermero,&mutex_paciente);
     }
+    //Si está siendo atendido por el enfermer@ debemos esperar a que termine.
+    pthread_cond_wait(&condicionAccionesPyEnfermero,&mutex_paciente);
     //Si no se va por gripe o catarro calcula si le da reacción
     //TIENE QUE ESPERAR INFORMACION DEL MEDICO Y/O ENFERMEROS
     pthread_cond_wait(&condicionInfoMedicoyEnfermero,&mutex_paciente);
     int reaccionPaciente=rand()% 100+1;
     if(reaccionPaciente<=10){
         //Si le da cambia el valor de atendido a 4
-        p->atendido=4;
+        pacientes[i].atendido=4;
         //Esperamos a que termine la atención
         pthread_cond_wait(&condicionAccionesPyMedico,&mutex_paciente);
     }else{
@@ -321,7 +318,7 @@ void *accionesPaciente(void *arg){
         if(participaEstudio<=25){
             //Si decide participar
             //Cambia el valor de la variable serológica
-            p->serologia=true;
+            pacientes[i].serologia=true;
             //Cambia el valor de paciente en estudio.
             //Avisa al estadistico
             pthread_cond_signal(&condicionAccionesPyEstadistico);
@@ -334,7 +331,7 @@ void *accionesPaciente(void *arg){
         }
     }
     //Libera su posición en cola de solicitudes y se va
-    p->id=0;
+    pacientes[i].id=0;
     //Escribe en el log
     writeLogMessage("Paciente","El paciente ha terminado de vacunarse y se ha ido.");
     pthread_mutex_unlock(&mutex_paciente);
