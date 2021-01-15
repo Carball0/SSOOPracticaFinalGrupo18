@@ -258,11 +258,11 @@ void accionesEnfermero(char tipo, int id) {     //TODO Terminar código
                     return;
                 }
         }*/
-        } else {    //Tipo invalido
-            writeLogMessage(str, "ERROR: Tipo inválido, cesando actividad de enfermero");
-            perror("Enfermero sin tipo valido");
-            return;
-        }
+    } else {    //Tipo invalido
+        writeLogMessage(str, "ERROR: Tipo inválido, cesando actividad de enfermero");
+        perror("Enfermero sin tipo valido");
+        return;
+    }
 
 
 }
@@ -285,8 +285,8 @@ void *accionesEstadistico(void *arg)
     pthread_mutex_unlock(&mutex_estadistico);
 }
 
-void *accionesPaciente(void *arg){ //TODO Señal médico atendido
-    // TODO Mirar señales estadístico
+void *accionesPaciente(void *arg){ //TODO Señal médico atendido (hecho)
+    // TODO Mirar señales estadístico (hecho)
     int i=*(int*)arg;
     pthread_mutex_lock(&mutex_paciente);
     //Guardar en el log la hora de entrada.
@@ -341,7 +341,7 @@ void *accionesPaciente(void *arg){ //TODO Señal médico atendido
     pthread_cond_wait(&condicionAccionesPyEnfermero,&mutex_paciente);
     //Si no se va por gripe o catarro calcula si le da reacción
     //TIENE QUE ESPERAR INFORMACION DEL MEDICO Y/O ENFERMEROS
-    pthread_cond_wait(&condicionInfoMedicoyEnfermero,&mutex_paciente);
+    //pthread_cond_wait(&condicionInfoMedicoyEnfermero,&mutex_paciente); TODO mirar a ver si esto se puede hacer con el thread anterior
     if(pacientes[i].atendido=2) {
         pthread_mutex_unlock(&mutex_paciente);
         pthread_exit(NULL);
