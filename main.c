@@ -22,16 +22,15 @@ struct Paciente {
 struct Enfermero {
     int id;
     char tipo;  // Junior J, Medio M, Senior S
+    int contEnfermero;  //Contador de pacientes atendidos para café
 };
 
 struct Paciente pacientes[MAXPACIENTES];
 struct Enfermero enfermeros[ENFERMEROS];
-int numPacientes, contEnfermero;
+int numPacientes;
 bool fin;
-pthread_t medico, estadistico, enfermero, hilo_paciente;
-pthread_mutex_t mutex_paciente;
-pthread_mutex_t mutex_estadistico;
-pthread_mutex_t mutex_enf;
+pthread_t medico, estadistico, enfermero[ENFERMEROS], hilo_paciente;
+pthread_mutex_t mutex_paciente, mutex_estadistico, mutex_enf;
 FILE* logFile;
 pthread_cond_t condicion;
 pthread_cond_t condicionAccionesPyEnfermero;
@@ -71,20 +70,16 @@ int main(int argc, char** argv) {
 
     for(int i=0; i<ENFERMEROS; i++) {
         enfermeros[i].id = i+1;
+        enfermeros[i].contEnfermero = 0;
         if(i == 0) enfermeros[i].tipo = 'J';
         if(i == 1) enfermeros[i].tipo = 'M';
         if(i == 2) enfermeros[i].tipo = 'S';
-        pthread_create(&enfermero, NULL, HiloEnfermero, &i);
+        pthread_create(&enfermero[i], NULL, HiloEnfermero, &i);
+        usleep(10);
     }
-
-    /*VARIABLE CONDICION(REVISAR Y CAMBIAR NOMBRE)
-    *basicamente es una variable inicializada a 0 que segun quien la use aumenta su valor,
-    * lo disminuye, o espera a que tenga un valor
-    */
 
     pthread_create(&medico,NULL,accionesMedico,NULL);
     pthread_create(&estadistico,NULL,accionesEstadistico,NULL);
-    //bucle que espera señales infinitamente
 
     fin = false;
 
@@ -132,7 +127,7 @@ void mainHandler(int signal) {
 //metodo que comprueba si hay sitio para la llegada de un nuevo paciente, y en ese caso lo crea
 void nuevoPaciente(int signal_handler)
 {
-    struct Paciente p;
+    pthread_mutex_lock(&mutex_paciente);
     for(int i = 0;i<MAXPACIENTES;i++){
         if(pacientes[i].id == 0){
             //si hay espacio, creamos un nuevo paciente y lo añadimos al array de pacientes
@@ -161,19 +156,22 @@ void nuevoPaciente(int signal_handler)
             break;
         }
     }
+    pthread_mutex_unlock(&mutex_paciente);
 }
 
 void *HiloEnfermero(void *arg) {
-    pthread_mutex_lock(&mutex_enf);     //Lock enfermero
     int i = *(int*)arg;     //Convertimos argumento
+    pthread_mutex_lock(&mutex_enf);     //Lock enfermero
     int id = enfermeros[i].id;
     char tipo = enfermeros[i].tipo;
     char str[] = "Enfermer@ ";
-    char idChar = id+1;
+    char idChar = id+'0';
     strncat(str, &idChar, 1);
     writeLogMessage(str, "Iniciado, comenzando atención");
     pthread_mutex_unlock(&mutex_enf);   //Unlock enfermero
-    accionesEnfermero(tipo, id);
+    while(1) {
+        accionesEnfermero(tipo, id);
+    }
 }
 
 bool isColaVacia() {
@@ -192,74 +190,79 @@ bool isColaVacia() {
 void accionesEnfermero(char tipo, int id) {     //TODO Terminar código
     srand(time(NULL));
     bool otroTipo = true;  //True si no se ha atendido a un apciente de su tipo y va a otro rango de edad
-    bool vacio = true; //True si no hay pacientes
 
     char str[] = "Enfermer@ ";
-    char idChar = id+1;
+    char idChar = id+'0';
     strncat(str, &idChar, 1);
 
     while(isColaVacia()) {
         sleep(2);
     }
-    while(1) {
-        if(tipo=='J' || tipo=='M' || tipo=='S') {   // Tipo valido
-            pthread_mutex_lock(&mutex_paciente); //Lock paciente
-            for(int i = 0; i<MAXPACIENTES; i++) {
-                if(pacientes[i].tipo == tipo && !pacientes[i].atendido) {
-                    otroTipo = false; vacio = false;
-                    pacientes[i].atendido = true;
-                    int random = (rand()%100)+1;    //Random entre 0 y 100
-                    writeLogMessage(str, "Comienza la atención del paciente");
-                    if(random<=80) {    //To_do en regla
-                        sleep((rand()%4)+1);
-                        if(pacientes[i].serologia){
-                            //TODO Se le manda a estudio
-                            // TODO Abandona consultorio, revisar si se va aqui o en estudio
-                            // pacientes[i].id = 0;
-                        }
-                        pthread_mutex_unlock(&mutex_paciente);
-                        writeLogMessage(str, "Fin atención paciente exitosa");
-                        break;
-                    } else if(random>80 && random<= 90) {  //Mal identificados
-                        sleep((rand()%5)+2);
-                        if(pacientes[i].serologia){
-                            // TODO Se le manda a estudio
-                            // TODO Abandona consultorio, revisar si se va aqui o en estudio
-                            // pacientes[i].id = 0;
-                        }
-                        pthread_mutex_unlock(&mutex_paciente);
-                        writeLogMessage(str, "Fin atención paciente exitosa");
-                        break;
-                    } else if(random>90 && random<=100){   //Catarro o Gripe
-                        sleep((rand()%5)+6);
-                        writeLogMessage(str, "Fin atención paciente: Catarro o Gripe");
-                        pacientes[i].id = 0;    //Borra paciente
-                        //Abandonan consultorio sin reaccion ni estudio
-                        pthread_mutex_unlock(&mutex_paciente);
+    if(tipo=='J' || tipo=='M' || tipo=='S') {   // Tipo valido
+        pthread_mutex_lock(&mutex_paciente); //Lock paciente
+        for(int i = 0; i<MAXPACIENTES; i++) {
+            if(pacientes[i].tipo == tipo && pacientes[i].atendido == 0) {
+                otroTipo = false;
+                pacientes[i].atendido = 1;
+                int random = (rand()%100)+1;    //Random entre 0 y 100
+                writeLogMessage(str, "Comienza la atención del paciente");
+                if(random<=80) {    //To_do en regla
+                    writeLogMessage(str, "Paciente con todo en regla, atendiendo...");
+                    sleep((rand()%4)+1);
+                    if(pacientes[i].serologia){
+                        //TODO Se le manda a estudio
+                        // TODO Abandona consultorio, revisar si se va aqui o en estudio
+                        // pacientes[i].id = 0;
                     }
-                }
-                if(contEnfermero == 5) {    //Comprobamos descanso para cafe
-                    writeLogMessage(str, "Descanso para el cafe");
-                    sleep(5);
+                    pthread_mutex_lock(&mutex_enf);
+                    enfermeros[i].contEnfermero++;  //Aumentamos contador de pacientes
+                    pthread_mutex_unlock(&mutex_enf);
+                    pthread_mutex_unlock(&mutex_paciente);
+                    writeLogMessage(str, "Fin atención paciente exitosa");
+                    break;
+                } else if(random>80 && random<= 90) {  //Mal identificados
+                    writeLogMessage(str, "Paciente mal identificado, atendiendo...");
+                    sleep((rand()%5)+2);
+                    if(pacientes[i].serologia){
+                        // TODO Se le manda a estudio
+                        // TODO Abandona consultorio, revisar si se va aqui o en estudio
+                        // pacientes[i].id = 0;
+                    }
+                    pthread_mutex_lock(&mutex_enf);
+                    enfermeros[i].contEnfermero++;  //Aumentamos contador de pacientes
+                    pthread_mutex_unlock(&mutex_enf);
+                    pthread_mutex_unlock(&mutex_paciente);
+                    writeLogMessage(str, "Fin atención paciente exitosa");
+                    break;
+                } else if(random>90 && random<=100){   //Catarro o Gripe
+                    writeLogMessage(str, "Paciente con catarro o gripe");
+                    sleep((rand()%5)+6);
+                    writeLogMessage(str, "Fin atención paciente: Catarro o Gripe");
+                    pacientes[i].id = 0;    //Borra paciente
+                    //Abandonan consultorio sin reaccion ni estudio
+                    pthread_mutex_unlock(&mutex_paciente);
                 }
             }
-            if(vacio) {
-                sleep(1);
-                accionesEnfermero(tipo, id);
-                return;
-            } else if(otroTipo) {  //Atendemos a otro paciente de otro rango de edad
-                for(int j = 0; j<MAXPACIENTES; j++) {
-                    if(!pacientes[j].atendido) {
-                        accionesEnfermero(pacientes[j].tipo, id);
-                        return;
-                    }
-                }
+            pthread_mutex_lock(&mutex_enf);
+            if(enfermeros[i].contEnfermero == 5) {    //Comprobamos descanso para cafe
+                writeLogMessage(str, "Descanso para el cafe");
+                sleep(5);
+                enfermeros[i].contEnfermero = 0;
             }
+            pthread_mutex_unlock(&mutex_enf);
+        }
+        /*if(otroTipo) {  //Atendemos a otro paciente de otro rango de edad
+            for(int j = 0; j<MAXPACIENTES; j++) {
+                if(!pacientes[j].atendido) {
+                    accionesEnfermero(pacientes[j].tipo, id);
+                    return;
+                }
+        }*/
         } else {    //Tipo invalido
+            writeLogMessage(str, "ERROR: Tipo inválido, cesando actividad de enfermero");
             perror("Enfermero sin tipo valido");
             return;
         }
-    }
 
 
 }
