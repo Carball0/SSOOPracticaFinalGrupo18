@@ -37,6 +37,7 @@ pthread_cond_t condicionAccionesPyEnfermero;
 pthread_cond_t condicionInfoMedicoyEnfermero;
 pthread_cond_t condicionAccionesPyMedico;
 pthread_cond_t condicionAccionesPyEstadistico;
+bool ignore_signals;
 
 bool isColaVacia();
 void mainHandler(int signal);
@@ -52,10 +53,14 @@ void writeLogMessage(char *id, char *msg);
 
 #pragma ide diagnostic ignored "EndlessLoop"
 int main(int argc, char** argv) {
-    signal(SIGUSR1, mainHandler);   //Junior
-    signal(SIGUSR2, mainHandler);   //Medio
-    signal(SIGPIPE, mainHandler);   //Senior
-    signal(SIGINT, mainHandler);    //Terminar programa
+
+    if(ignore_signals == false){
+        signal(SIGUSR1, mainHandler);   //Junior
+        signal(SIGUSR2, mainHandler);   //Medio
+        signal(SIGPIPE, mainHandler);   //Senior
+        signal(SIGINT, mainHandler);    //Terminar programa
+    }
+
 
     // Inicialización del mutex - TODO Gestión de errores de mutex/thread
     pthread_mutex_init(&mutex_enf, NULL);
@@ -104,7 +109,11 @@ void mainHandler(int signal) {
             nuevoPaciente(SIGPIPE); //Generar paciente Senior
             break;
         case SIGINT:
-            //TODO Salir del programa
+            ignore_signals = true;
+            while(isColaVacia() == false){
+                usleep(100);
+            }
+            writeLogMessage("SIGINT","El consultorio se ha cerrado. Fin del programa.");
             exit(0);
             break;
         default:
