@@ -38,7 +38,6 @@ pthread_cond_t condicionInfoMedicoyEnfermero;
 pthread_cond_t condicionAccionesPyMedico;
 pthread_cond_t condicionAccionesPyEstadistico;
 
-void writeLogMessage(char *id, char *msg);
 bool isColaVacia();
 void mainHandler(int signal);
 void nuevoPaciente(int signal);
@@ -48,7 +47,8 @@ void accionesEnfermero(char tipo, int id);
 void *accionesEstadistico(void *arg);
 void *accionesMedico(void *arg);
 void accionesMedico2(struct Paciente auxPaciente);
-void *HiloPaciente(void *arg);
+void eliminaPaciente(int i);
+void writeLogMessage(char *id, char *msg);
 
 #pragma ide diagnostic ignored "EndlessLoop"
 int main(int argc, char** argv) {
@@ -75,7 +75,7 @@ int main(int argc, char** argv) {
         if(i == 1) enfermeros[i].tipo = 'M';
         if(i == 2) enfermeros[i].tipo = 'S';
         pthread_create(&enfermero[i], NULL, HiloEnfermero, &i);
-        usleep(100);
+        usleep(1000);
     }
 
     pthread_create(&medico,NULL,accionesMedico,NULL);
@@ -90,18 +90,6 @@ int main(int argc, char** argv) {
             break;
         }
     }
-}
-
-void writeLogMessage(char *id, char *msg) {
-// Calculamos la hora actual
-    time_t now = time(0);
-    struct tm *tlocal = localtime(&now);
-    char stnow[25];
-    strftime(stnow, 25, "%d/%m/%y %H:%M:%S", tlocal);
-// Escribimos en el log
-    logFile = fopen("logFileName", "a");
-    fprintf(logFile, "[%s] %s: %s\n", stnow, id, msg);
-    fclose(logFile);
 }
 
 void mainHandler(int signal) {
@@ -174,47 +162,38 @@ void *HiloEnfermero(void *arg) {
     }
 }
 
-bool isColaVacia() {
-    bool vacio = true;
-    pthread_mutex_lock(&mutex_paciente);
-    for(int i = 0; i<MAXPACIENTES; i++) {
-        if(pacientes[i].id != 0) {
-            vacio = false;
-        }
-    }
-    pthread_mutex_unlock(&mutex_paciente);
-    return vacio;
-}
-
 #pragma ide diagnostic ignored "EndlessLoop"
-void accionesEnfermero(char tipo, int id) {     //TODO Terminar código
+void accionesEnfermero(char tipo, int id) {
     srand(time(NULL));
     bool otroTipo = true;  //True si no se ha atendido a un apciente de su tipo y va a otro rango de edad
-    int j = -1; //Paciente seleccionado
+    int j = -1; //Posición del paciente que se va a tratar
 
     char str[] = "Enfermer@ ";
     char idChar = id+'0';
     strncat(str, &idChar, 1);
 
     while(isColaVacia()) {
-        sleep(2);
+        sleep(1);
     }
+
     if(tipo=='J' || tipo=='M' || tipo=='S') {   // Tipo valido
+        pthread_mutex_lock(&mutex_paciente); //Lock paciente
         for(int i = 0; i<MAXPACIENTES; i++) {
-            pthread_mutex_lock(&mutex_paciente); //Lock paciente
             if (pacientes[i].id != 0 && pacientes[i].tipo == tipo && pacientes[i].atendido == 0) {
                 writeLogMessage(str, "Paciente seleccionado");
                 j = i;
                 break;
             }
-            pthread_mutex_unlock(&mutex_paciente); //Lock paciente
         }
-
+        sleep(1);
         if(j != -1) {   //Si se ha seleccionado un paciente
             if(pacientes[j].tipo == tipo && pacientes[j].atendido == 0) {
                 otroTipo = false;
                 pacientes[j].atendido = 1;
                 int random = (rand()%100)+1;    //Random entre 0 y 100
+
+                pthread_mutex_unlock(&mutex_paciente);  //Unlock paciente
+
                 writeLogMessage(str, "Comienza la atención del paciente");
                 if(random<=80) {    //To_do en regla
                     writeLogMessage(str, "Paciente con todo en regla, atendiendo...");
@@ -223,8 +202,7 @@ void accionesEnfermero(char tipo, int id) {     //TODO Terminar código
                     enfermeros[j].contEnfermero++;  //Aumentamos contador de pacientes
                     pthread_mutex_unlock(&mutex_enf);
                     writeLogMessage(str, "Fin atención paciente exitosa");
-                    pthread_mutex_unlock(&mutex_paciente);
-                    //Enviamos señal al accionesPaciente cuando termina la atención
+                    //Enviamos señal a accionesPaciente cuando termina la atención
                     pthread_cond_signal(&condicionInfoMedicoyEnfermero);
                 } else if(random>80 && random<= 90) {  //Mal identificados
                     writeLogMessage(str, "Paciente mal identificado, atendiendo...");
@@ -233,15 +211,17 @@ void accionesEnfermero(char tipo, int id) {     //TODO Terminar código
                     enfermeros[j].contEnfermero++;  //Aumentamos contador de pacientes
                     pthread_mutex_unlock(&mutex_enf);
                     writeLogMessage(str, "Fin atención paciente exitosa");
-                    pthread_mutex_unlock(&mutex_paciente);
-                    //Enviamos señal al accionesPaciente cuando termina la atención
+                    //Enviamos señal a accionesPaciente cuando termina la atención
                     pthread_cond_signal(&condicionInfoMedicoyEnfermero);
                 } else if(random>90 && random<=100){   //Catarro o Gripe
                     writeLogMessage(str, "Paciente con catarro o gripe");
                     sleep((rand()%5)+6);
+
+                    pthread_mutex_lock(&mutex_paciente);  //Lock paciente
                     pacientes[j].atendido = 2;
+                    pthread_mutex_unlock(&mutex_paciente);  //Unlock paciente
+
                     writeLogMessage(str, "Fin atención paciente: Catarro o Gripe");
-                    pthread_mutex_unlock(&mutex_paciente);
                     //Enviamos señal al accionesPaciente cuando termina la atención
                     pthread_cond_signal(&condicionInfoMedicoyEnfermero);
                 }
@@ -253,9 +233,8 @@ void accionesEnfermero(char tipo, int id) {     //TODO Terminar código
                 enfermeros[j].contEnfermero = 0;
             }
             pthread_mutex_unlock(&mutex_enf);
-        } else {       //Si no se ha seleccionado un paciente
-            //TODO
         }
+        //TODO Gestionar de otro tipo
         /*if(otroTipo) {  //Atendemos a otro paciente de otro rango de edad
             for(int j = 0; j<MAXPACIENTES; j++) {
                 if(!pacientes[j].atendido) {
@@ -527,4 +506,45 @@ void accionesMedico2(struct Paciente auxPaciente){
     //finaliza la atención
     writeLogMessage("Paciente","El paciente fue atendido.");
 
+}
+
+bool isColaVacia() {
+    bool vacio = true;
+    pthread_mutex_lock(&mutex_paciente);
+    for(int i = 0; i<MAXPACIENTES; i++) {
+        if(pacientes[i].id != 0) {
+            vacio = false;
+        }
+    }
+    pthread_mutex_unlock(&mutex_paciente);
+    return vacio;
+}
+
+void eliminaPaciente(int i) {
+    pthread_mutex_lock(&mutex_paciente);
+    pacientes[i].id = 0;
+    for(int j = i; j < MAXPACIENTES; j++) {
+        //Si id==0 o está en la última posición, no hay más pacientes alante en la cola
+        if(j == MAXPACIENTES-1) {
+            pacientes[j].id=0;
+            break;
+        } else {
+            pacientes[j] = pacientes[j+1];
+            pacientes[j].id = j+1;
+            pacientes[j+1].id = 0;
+        }
+    }
+    pthread_mutex_unlock(&mutex_paciente);
+}
+
+void writeLogMessage(char *id, char *msg) {
+// Calculamos la hora actual
+    time_t now = time(0);
+    struct tm *tlocal = localtime(&now);
+    char stnow[25];
+    strftime(stnow, 25, "%d/%m/%y %H:%M:%S", tlocal);
+// Escribimos en el log
+    logFile = fopen("logFileName", "a");
+    fprintf(logFile, "[%s] %s: %s\n", stnow, id, msg);
+    fclose(logFile);
 }
