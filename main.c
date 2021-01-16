@@ -449,9 +449,12 @@ void accionesMedico2(struct Paciente auxPaciente){
         sleep(tiempoEspera);
 
         if(tieneReaccion <= 10) {//comprueba si hay reaccion
+            pthread_mutex_lock(&mutex_paciente);
             auxPaciente.atendido = 4;
+            pthread_mutex_unlock(&mutex_paciente);
         }
         if(vaAlEstudio <= 25) {//comprueba si participa en el estudio
+            pthread_mutex_lock(&mutex_paciente);
             auxPaciente.serologia = true;
             //pasa señal al estadistico
             pthread_cond_signal(&condicionAccionesPyEstadistico);
@@ -466,9 +469,12 @@ void accionesMedico2(struct Paciente auxPaciente){
         sleep(tiempoEspera);
 
         if(tieneReaccion <= 10) {//comprueba si hay reaccion
+            pthread_mutex_lock(&mutex_paciente);
             auxPaciente.atendido = 4;
+            pthread_mutex_unlock(&mutex_paciente);
         }
         if(vaAlEstudio <= 25) {//comprueba si participa en el estudio
+            pthread_mutex_lock(&mutex_paciente);
             auxPaciente.serologia = true;
             //pasa señal al estadistico
             pthread_cond_signal(&condicionAccionesPyEstadistico);
