@@ -10,8 +10,8 @@
 #include <string.h>
 #include <limits.h>
 
-int MAXPACIENTES=15;
-int ENFERMEROS=3;
+#define MAXPACIENTES 15
+#define ENFERMEROS 3
 
 struct Paciente {
     int id;
@@ -28,12 +28,12 @@ struct Enfermero {
     int contEnfermero;  //Contador de pacientes atendidos para café
 };
 
-struct Paciente *pacientes;
-struct Enfermero *enfermeros;
+struct Paciente pacientes[MAXPACIENTES];
+struct Enfermero enfermeros[ENFERMEROS];
 int numPacientes, contPrioridad, enfCont;
-pthread_t medico, estadistico, *enfermero;
+pthread_t medico, estadistico, enfermero[ENFERMEROS];
 pthread_mutex_t mutex_paciente, mutex_estadistico, mutex_enf;
-pthread_cond_t *cond_pac, cond_est, cond_med;
+pthread_cond_t cond_pac[MAXPACIENTES], cond_est, cond_med;
 FILE* logFile;
 bool ignore_signals;
 
@@ -58,22 +58,7 @@ int main(int argc, char** argv) {
     signal(SIGUSR2, mainHandler);   //Medio
     signal(SIGPIPE, mainHandler);   //Senior
     signal(SIGINT, mainHandler);    //Terminar programa
-    if(argc>0) {
-        if(argc==1) {
-            if(argv[1]>0) {
-                MAXPACIENTES=argv[1];
-            }
-        }else if(argc==2) {
-            if(argv[1]>0&&argv[2]>0) {
-                MAXPACIENTES=argv[1];
-                ENFERMEROS=ENFERMEROS+argv[2]-1;
-            }
-        }
-    }
-    pacientes=malloc(MAXPACIENTES);
-    enfermeros=malloc(ENFERMEROS);
-    enfermero=malloc(ENFERMEROS);
-    cond_pac=malloc(MAXPACIENTES);
+
     // Inicialización del mutex y variables condición
     pthread_mutex_init(&mutex_enf, NULL);
     pthread_mutex_init(&mutex_paciente, NULL);
