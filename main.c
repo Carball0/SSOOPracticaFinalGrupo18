@@ -26,7 +26,6 @@ struct Enfermero {
     int id;     // Junior 1, Medio 2, Senior 3
     char tipo;  // Junior J, Medio M, Senior S
     int contEnfermero;  //Contador de pacientes atendidos para café
-    bool ocupado;   //Si está o no ocupado con un paciente
 };
 
 struct Paciente pacientes[MAXPACIENTES];
@@ -50,7 +49,6 @@ void atenderPacientesMed();
 bool isColaVacia();
 int buscaPaciente(char tipo);
 int buscaPacienteMedReaccion();
-int buscaPacienteMed();
 void eliminaPaciente(int i);
 void writeLogMessage(char *id, char *msg);
 
@@ -175,7 +173,7 @@ void *HiloEnfermero(void *arg) {
     char tipo = enfermeros[i].tipo;
     char str[15];
     sprintf(str, "Enfermer@ %d", id);
-    writeLogMessage(str, "Iniciado, comenzando atención");
+    writeLogMessage(str, "Preparado para atender");
     while(1) {
         accionesEnfermero(tipo, id);
     }
@@ -203,7 +201,7 @@ void accionesEnfermero(char tipo, int id) {
             usleep(1000);   //Damos tiempo al hilo paciente a estar bien iniciado
         } else {            //No hay de nuestro tipo, probamos con otro paciente de otro tipo
             pthread_mutex_unlock(&mutex_paciente);    //Unlock paciente
-            usleep(1000);   //Esperamos por si el enfermero correspondiente va a coger el paciente y no interrumpirle
+            sleep(1);   //Esperamos por si el enfermero correspondiente va a coger el paciente y no interrumpirle
             pthread_mutex_lock(&mutex_paciente);    //Lock paciente
             for(int i = 0; i < MAXPACIENTES; i++) {
                 if(pacientes[i].id != 0 && pacientes[i].atendido == -1 && pacientes[i].tipo != tipo) {
@@ -218,10 +216,9 @@ void accionesEnfermero(char tipo, int id) {
 
         if(j != -1) {   //Si se ha seleccionado un paciente
             if(pacientes[j].atendido == 0) {
-                pthread_mutex_lock(&mutex_enf); //Lock enf
+                pthread_mutex_lock(&mutex_enf);     //Lock enf
                 enfCont++;  //Subimos contador para indicar que estamos atendiendo a un paciente más
-                enfermeros[id-1].ocupado = true;    //Marcamos enfermero como ocupado
-                pthread_mutex_unlock(&mutex_enf); //Unlock enf
+                pthread_mutex_unlock(&mutex_enf);   //Unlock enf
 
                 sprintf(str1, "Paciente %d con todo en regla, atendiendo...", pacientes[j].id);
                 sprintf(str2, "Paciente %d mal identificado, atendiendo...", pacientes[j].id);
@@ -262,19 +259,14 @@ void accionesEnfermero(char tipo, int id) {
 
             sleep(3);  //Sincronización con el paciente
 
-            char mensaje6[50];
-            sprintf(mensaje6, "Enviando señal de fin de atención al paciente %d", pacientes[j].id);
-            writeLogMessage(str, mensaje6);
+            pthread_mutex_lock(&mutex_paciente);    //Lock paciente
+            pthread_cond_signal(&cond_pac[j]);      //Señal al paciente seleccionado
+            pthread_mutex_unlock(&mutex_paciente);  //Unlock paciente
 
-            pthread_mutex_lock(&mutex_paciente);
-            pthread_cond_signal(&cond_pac[j]);  //Señal al paciente seleccionado
-            pthread_mutex_unlock(&mutex_paciente);
-
-            pthread_mutex_lock(&mutex_enf); //Lock enf
+            pthread_mutex_lock(&mutex_enf);     //Lock enf
             enfCont--;                          //Terminamos con paciente, bajamos el contador de atención
-            enfermeros[id-1].ocupado = true;    //Marcamos enfermero como libre
             enfermeros[j].contEnfermero++;      //Aumentamos contador de pacientes
-            pthread_mutex_unlock(&mutex_enf); //Unlock enf
+            pthread_mutex_unlock(&mutex_enf);   //Unlock enf
 
             if(enfermeros[j].contEnfermero == 5) {    //Comprobamos descanso para cafe
                 writeLogMessage(str, "Hago descanso para el café");
@@ -319,8 +311,7 @@ void *HiloEstadistico(void *arg) {
             sleep(4);
             writeLogMessage("Estadistico",str1);
 
-            //Enviamos señal de que ya finalizó el estudio
-            pthread_cond_signal(&cond_est);
+            pthread_cond_signal(&cond_est); //Enviamos señal de que ya finalizó el estudio
             pthread_mutex_unlock(&mutex_estadistico);
         } else {
             sleep(1);
@@ -330,35 +321,31 @@ void *HiloEstadistico(void *arg) {
 
 void *HiloPaciente(void *arg) {
     int i=*(int*)arg;
-
-    pthread_mutex_lock(&mutex_paciente);    //Lock paciente
-    char str[15], mensajeTipo[30];
+    char str[15], entrada[60];
     char tipo = pacientes[i].tipo;
     sprintf(str, "Paciente %d", pacientes[i].id);
-    sprintf(mensajeTipo, "Soy del tipo %c", tipo);
-
-    writeLogMessage(str,"Paciente entra al consultorio (ver hora)");
-    writeLogMessage(str, mensajeTipo);
+    sprintf(entrada, "Paciente %d de tipo %c entra al consultorio (ver hora)",pacientes[i].id, tipo);
+    writeLogMessage(str, entrada);
 
     sleep(3);   //Espera inicial del paciente
 
     //Comprueba atendido, si no lo está comprueba comportamiento
+    pthread_mutex_lock(&mutex_paciente);    //Lock paciente
     while(pacientes[i].id!=0 && pacientes[i].atendido<=0){
         int comportamientoPaciente=rand()% 100+1;
         if(comportamientoPaciente<=20){ //Un 20% se cansa de esperar y se va
-            writeLogMessage(str,"El paciente se ha ido porque se ha cansado de esperar.");
-            //Código de cuando se va
             eliminaPaciente(i);
+            writeLogMessage(str,"El paciente se ha ido porque se ha cansado de esperar.");
             break;
         }else if(comportamientoPaciente>20&&comportamientoPaciente<=30){ //Otro 10% se lo piensa mejor y se va
-            writeLogMessage(str,"El paciente se lo ha pensado mejor y se ha ido.");
             eliminaPaciente(i);
+            writeLogMessage(str,"El paciente se lo ha pensado mejor y se ha ido.");
             break;
         }else{ //70% restante
             int comportamientoPacRestantes=rand()% 100+1;
             if(comportamientoPacRestantes<=5){  //Va al baño y pierde el turno
-                writeLogMessage(str,"El paciente ha ido al baño y ha perdido el turno.");
                 eliminaPaciente(i);
+                writeLogMessage(str,"El paciente ha ido al baño y ha perdido el turno.");
                 break;
             }else{
                 pthread_mutex_unlock(&mutex_paciente);
@@ -369,12 +356,9 @@ void *HiloPaciente(void *arg) {
     }
 
     if(pacientes[i].id!=0){     //Si el paciente no se ha ido recibimos señal de enfermero/medico
-        writeLogMessage(str, "Fin de comprobaciones de paciente");
-        writeLogMessage(str, "Espero señal del enfermero o del médico");
         pthread_cond_wait(&cond_pac[i], &mutex_paciente);
-        writeLogMessage(str, "Señal recibida, continuamos");
     } else {                    //Si se ha ido, guardamos el mensaje y salimos
-        writeLogMessage(str, "Salgo del consultorio");
+        writeLogMessage(str, "Me voy del consultorio");
         pthread_mutex_unlock(&mutex_paciente);
         pthread_exit(NULL);
     }
@@ -389,8 +373,8 @@ void *HiloPaciente(void *arg) {
     int reaccionPaciente=rand()% 100+1;
     if(reaccionPaciente<=10){
         pacientes[i].atendido=4;    //Si le da reacción cambia el valor de atendido a 4
-        writeLogMessage(str, "La vacuna me ha dado reacción");
-        //Esperamos a que termine la atención
+        writeLogMessage(str, "He sido atendido y la vacuna me ha dado reacción");
+        //Esperamos a que termine la atención por parte del médico
         pthread_cond_wait(&cond_med, &mutex_paciente);
     }else{
         //Si no le da reacción calculamos si decide o no participar en el estudio serológico
@@ -400,32 +384,33 @@ void *HiloPaciente(void *arg) {
             pthread_mutex_lock(&mutex_estadistico);
             pacientes[i].serologia=true;
             pthread_mutex_unlock(&mutex_paciente);
-            writeLogMessage(str,"El paciente está preparado para el estudio");
+            writeLogMessage(str,"He sido atendido y estoy preparado para el estudio");
             //Esperamos señal de que ya acabó el estudio
             pthread_cond_wait(&cond_est, &mutex_estadistico);
             pthread_mutex_unlock(&mutex_estadistico);
-            writeLogMessage(str, "Ya he terminado el estudio");
+            writeLogMessage(str, "Ya terminé el estudio");
         }
     }
     //Libera su posición en cola de solicitudes y se va
     eliminaPaciente(i);
-    writeLogMessage(str,"El paciente ha terminado de vacunarse y se ha ido");
+    writeLogMessage(str,"He terminado de vacunarme y me voy");
     pthread_mutex_unlock(&mutex_paciente);
     pthread_exit(NULL);
     //Fin del hilo Paciente.
 }
 
 void *HiloMedico(void *arg) {
-    writeLogMessage("Médico", "Iniciado, comenzando atención");
+    writeLogMessage("Médico", "Preparado para atender");
     while(1) {
-        comprobarReaccionMed();
-        atenderPacientesMed();
+        comprobarReaccionMed();     //Comprueba pacientes con reacción
+        atenderPacientesMed();      //Comprueba si tiene que atender pacientes
     }
 }
 
 void comprobarReaccionMed() {
     int i = -1;
-    pthread_mutex_lock(&mutex_paciente);
+    //Buscamos al paciente CON REACCIÓN que más tiempo lleve esperando
+    pthread_mutex_lock(&mutex_paciente);        //Lock paciente
     if((i = buscaPacienteMedReaccion()) != -1) {    //Tiene reacción (atendido == 4)
         pacientes[i].atendido = 0;  //Lo reiniciamos para que no lo coja de nuevo en la siguiente
         char str[50], str1[50];
@@ -435,55 +420,55 @@ void comprobarReaccionMed() {
         sprintf(str, "Paciente %d con reacción atendido correctamente", pacientes[i].id);
         writeLogMessage("Médico", str);
         pthread_cond_signal(&cond_med);
-        pthread_mutex_unlock(&mutex_paciente);
+        pthread_mutex_unlock(&mutex_paciente);  //Unlock paciente
     } else {
-        pthread_mutex_unlock(&mutex_paciente);
+        pthread_mutex_unlock(&mutex_paciente);  //Unlock paciente
         sleep(2);
     }
 }
 
 void atenderPacientesMed() {
-    int junior=0, medio=0, senior=0, i=-1; //num pacientes Junior, Medio y Senior
+    int junior=0, medio=0, senior=0, i=-1;  //Contador de cola y índice de paciente que seleccionamos
     char tipo;
 
     //COMPROBACIÓN INICIAL: Si los enfermeros no están completos, el médico no atenderá pacientes
     pthread_mutex_lock(&mutex_enf); //Lock enf
     if(enfCont<ENFERMEROS) {
-        pthread_mutex_unlock(&mutex_enf); //Unlock enf
+        pthread_mutex_unlock(&mutex_enf);   //Unlock enf
         return;
     }
-    pthread_mutex_unlock(&mutex_enf); //Unlock enf
+    pthread_mutex_unlock(&mutex_enf);       //Unlock enf
 
-    //Buscamos al paciente CON REACCIÓN que más tiempo lleve esperando
-    pthread_mutex_lock(&mutex_paciente);
-    writeLogMessage("Médico", "Entro a atender pacientes");
-    if(buscaPacienteMed() != -1){    //No hay pacientes con reacción, atendemos a pacientes por orden de prioridad
-        //Comprobamos cuál es la cola de pacientes que más pacientes tiene esperando
-        for (int j = 0; j < MAXPACIENTES; j++) {
-            if (j == 0) {
-                junior = 0; medio = 0; senior = 0;
-            }
-            if(pacientes[i].id != 0) {
-                if (pacientes[j].tipo == 'J') junior++;
-                if (pacientes[j].tipo == 'M') medio++;
-                if (pacientes[j].tipo == 'S') senior++;
-            }
+
+    pthread_mutex_lock(&mutex_paciente);    //Lock paciente
+    //Comprobamos cuál es la cola de pacientes que más pacientes tiene esperando
+    for (int j = 0; j < MAXPACIENTES; j++) {
+        if (j == 0) {
+            junior = 0; medio = 0; senior = 0;
         }
-        //Atendemos a aquel de la cola con mas solicitudes y que mas tiempo lleve esperando
-        if (junior >= medio && junior >= senior) tipo = 'J';
-        if (medio >= junior && medio >= senior) tipo = 'M';
-        if (senior >= junior && senior >= medio) tipo = 'S';
+        if(pacientes[j].id != 0) {
+            if (pacientes[j].tipo == 'J') junior++;
+            if (pacientes[j].tipo == 'M') medio++;
+            if (pacientes[j].tipo == 'S') senior++;
+        }
+    }
+    //Atendemos a aquel de la cola con mas solicitudes y que mas tiempo lleve esperando
+    if (junior >= medio && junior >= senior) tipo = 'J';
+    if (medio >= junior && medio >= senior) tipo = 'M';
+    if (senior >= junior && senior >= medio) tipo = 'S';
 
-        int a = buscaPaciente(tipo);
-
+    int a = buscaPaciente(tipo);
+    if(a != -1){    //Atendemos a pacientes por orden de prioridad
+        writeLogMessage("Médico", "Entro a atender pacientes");
         int tipoAtencion = rand()% 100+1;; //si es reaccion o vacunacion
         pacientes[a].atendido = 1;
-        char mensaje1[50], mensaje2[50], mensaje3[50], mensaje4[50];
+        char mensaje1[50], mensaje2[50], mensaje3[50], mensaje4[50], fin[50];
 
         sprintf(mensaje1, "Paciente %d con todo en regla, atendiendo...", pacientes[a].id);
         sprintf(mensaje2, "Paciente %d mal identificado, atendiendo...", pacientes[a].id);
         sprintf(mensaje3, "Paciente %d con catarro o gripe", pacientes[a].id);
         sprintf(mensaje4, "Comienza la atención del paciente %d", pacientes[a].id);
+        sprintf(fin, "El paciente %d fue atendido", pacientes[a].id);
 
         writeLogMessage("Médico", mensaje4);    //Comienza atención del paciente
 
@@ -496,22 +481,21 @@ void atenderPacientesMed() {
 
         }else if(tipoAtencion > 80 && tipoAtencion <= 90){   //Paciente mal identificado
             writeLogMessage("Médico",mensaje2);
-            int tiempoEspera =  rand()% 5+2; //Tiempo de espera está entre 2 y 6 segundos
+            int tiempoEspera =  rand()% 5+2;        //Tiempo de espera está entre 2 y 6 segundos
             pacientes[a].atendido = 1;
             pthread_mutex_unlock(&mutex_paciente);  //Unlock mutex
             sleep(tiempoEspera);
         } else if(tipoAtencion >= 90){                       //Paciente tiene catarro o gripe
             writeLogMessage("Médico",mensaje3);
-            int tiempoEspera =  rand()% 5+6; //Tiempo de espera está entre 6 y 10 segundos
+            int tiempoEspera =  rand()% 5+6;        //Tiempo de espera está entre 6 y 10 segundos
             pacientes[a].atendido = 2;
             pthread_mutex_unlock(&mutex_paciente);  //Unlock mutex
             sleep(tiempoEspera);
         }
 
-        sleep(3);
         writeLogMessage("Médico","Enviando señal de fin de atención al paciente");
         pthread_mutex_lock(&mutex_paciente);    //Lock mutex
-        pthread_cond_signal(&cond_pac[a]);  //Señal al paciente seleccionado
+        pthread_cond_signal(&cond_pac[a]);      //Señal al paciente seleccionado
         pthread_mutex_unlock(&mutex_paciente);  //Unlock mutex
 
         //Finaliza la atención
@@ -523,6 +507,9 @@ void atenderPacientesMed() {
     }
 }
 
+/*
+ * Busca en la lista para determinar si está vacía o no
+ */
 bool isColaVacia() {
     bool vacio = true;
     for(int i = 0; i<MAXPACIENTES; i++) {
@@ -567,35 +554,6 @@ int buscaPacienteMedReaccion() {
         //Si la posicion no está vacía, la prioridad es mayor a la ya guardada y si no se ha atendido
         if(pacientes[i].id != 0 && pacientes[i].prioridad < prioridad &&
            pacientes[i].atendido==4) {
-            prioridad = pacientes[i].prioridad;
-            posicion = i;
-        }
-    }
-    return posicion;
-}
-
-/*
- * Devuelve el paciente con mayor prioridad de la lista que esté sin atender
- * El paciente no debe estar iniciado por nadie (atendido debe ser -1)
- * Si los enfermeros están libres, los pacientes los atenderá el enfermero
- * correspondiente, devolviendo también -1
- * Si atendido es 0, es que un thread ya lo ha cogido y lo está empezando a atender
- * Precondiciones:  La lista no está vacía, si lo está devolverá -1
- *                  Se inicia la función con el MUTEX YA BLOQUEADO
- */
-int buscaPacienteMed() {
-    int prioridad = INT_MAX;
-    int posicion = -1;
-    pthread_mutex_lock(&mutex_enf); //Lock enf
-    if(enfCont<3) {
-        pthread_mutex_unlock(&mutex_enf); //Unlock enf
-        return -1;
-    }
-    pthread_mutex_unlock(&mutex_enf); //Unlock enf
-    for(int i = 0; i<MAXPACIENTES; i++) {
-        //Si la posicion no está vacía, la prioridad es mayor a la ya guardada y si no se ha atendido
-        if(pacientes[i].id != 0 && pacientes[i].prioridad < prioridad &&
-           pacientes[i].atendido==-1) {
             prioridad = pacientes[i].prioridad;
             posicion = i;
         }
